@@ -9,10 +9,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "format": "oxfmt",
+    "server": "node server.cjs",
+    "start": "concurrently \"node server.cjs\" \"vite preview --host 0.0.0.0\"",
     "electron:dev": "cross-env ELECTRON=true vite build && electron .",
     "electron:build": "cross-env ELECTRON=true vite build && electron-builder --win"
   },
   "dependencies": {
+    "express": "^4.19.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -23,6 +26,7 @@
     "@vitejs/plugin-react": "^6.0.0",
     "tailwindcss": "^4.0.0",
     "@tailwindcss/vite": "^4.0.0",
+    "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
@@ -39,15 +43,15 @@
     "files": [
       "dist/**/*",
       "electron/main.cjs",
-      "electron/preload.cjs"
+      "electron/preload.cjs",
+      "server.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "server.cjs", "to": "server.cjs" }
     ],
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ],
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
       "sign": false,
       "signingHashAlgorithms": null
     },

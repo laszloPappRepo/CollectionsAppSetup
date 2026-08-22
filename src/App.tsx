@@ -97,6 +97,25 @@ const EMOJI_OPTIONS = [
   "🌍","🚀","⚽","🏀","🎲","🃏","🍿","📰","🗺️","💡","🔬","🎯",
 ];
 
+// ─── API sync ────────────────────────────────────────────────────────────────
+
+const API = `http://${window.location.hostname}:3001/api/data`;
+
+async function loadFromServer(): Promise<{ types: CollectionType[]; folders: Folder[]; items: MediaItem[] } | null> {
+  try {
+    const res = await fetch(API);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.types?.length && !data.folders?.length && !data.items?.length) return null;
+    return data;
+  } catch { return null; }
+}
+
+async function saveToServer(types: CollectionType[], folders: Folder[], items: MediaItem[]) {
+  try { await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types, folders, items }) }); }
+  catch { /* offline — data still in localStorage */ }
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
@@ -855,22 +874,33 @@ function FolderCard({ folder, itemCount, subfolderCount, onClick, onRename, onDe
 // ─── main app ────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [types, setTypes] = useState<CollectionType[]>(() => {
-    try { const v = localStorage.getItem("col_types"); return v ? JSON.parse(v) : INITIAL_TYPES; } catch { return INITIAL_TYPES; }
-  });
-  const [folders, setFolders] = useState<Folder[]>(() => {
-    try { const v = localStorage.getItem("col_folders"); return v ? JSON.parse(v) : INITIAL_FOLDERS; } catch { return INITIAL_FOLDERS; }
-  });
-  const [items, setItems] = useState<MediaItem[]>(() => {
-    try { const v = localStorage.getItem("col_items"); return v ? JSON.parse(v) : INITIAL_ITEMS; } catch { return INITIAL_ITEMS; }
-  });
+  const [types, setTypes] = useState<CollectionType[]>(INITIAL_TYPES);
+  const [folders, setFolders] = useState<Folder[]>(INITIAL_FOLDERS);
+  const [items, setItems] = useState<MediaItem[]>(INITIAL_ITEMS);
+  const [loaded, setLoaded] = useState(false);
 
-  // persist to localStorage
-  useEffect(() => { try { localStorage.setItem("col_types",   JSON.stringify(types));   } catch {} }, [types]);
-  useEffect(() => { try { localStorage.setItem("col_folders", JSON.stringify(folders)); } catch {} }, [folders]);
-  useEffect(() => { try { localStorage.setItem("col_items",   JSON.stringify(items));   } catch {} }, [items]);
+  // load from server on mount
+  useEffect(() => {
+    loadFromServer().then((data) => {
+      if (data) {
+        setTypes(data.types);
+        setFolders(data.folders);
+        setItems(data.items);
+      }
+      setLoaded(true);
+    });
+  }, []);
+
+  // sync to server whenever data changes (skip first render before load)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!loaded) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveToServer(types, folders, items), 800);
+  }, [types, folders, items, loaded]);
 
   // navigation
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(["movie"]));
@@ -934,6 +964,7 @@ export default function App() {
     setSelectedTypeId(folder.typeId);
     setSelectedFolderId(id);
     setExpandedTypes((s) => new Set([...s, folder.typeId]));
+    setSidebarOpen(false);
   };
 
   const addFolder = () => {
@@ -1014,14 +1045,35 @@ export default function App() {
 
   const inputStyle = { background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1" };
 
+  if (!loaded) {
+    return (
+      <div className="flex h-screen items-center justify-center" style={{ background: "#0d0d10", color: "#6b6870", fontFamily: "JetBrains Mono, monospace", fontSize: "0.85rem" }}>
+        Loading…
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#0d0d10", color: "#e8e6e1" }}>
 
+      {/* ── Mobile overlay ── */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-20 md:hidden" style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* ── Sidebar ── */}
-      <aside className="flex flex-col w-60 shrink-0 h-full overflow-y-auto" style={{ background: "#0d0d10", borderRight: "1px solid #2a2830" }}>
-        <div className="px-5 py-6">
-          <h1 style={{ fontFamily: "DM Serif Display, serif", fontSize: "1.4rem", color: "#e8e6e1" }}>Collections</h1>
-          <p className="text-xs mt-0.5" style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}>{totalItems} items</p>
+      <aside
+        className={`flex flex-col shrink-0 h-full overflow-y-auto fixed md:relative z-30 md:z-auto transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        style={{ width: 240, background: "#0d0d10", borderRight: "1px solid #2a2830" }}>
+        <div className="px-5 py-6 flex items-start justify-between">
+          <div>
+            <h1 style={{ fontFamily: "DM Serif Display, serif", fontSize: "1.4rem", color: "#e8e6e1" }}>Collections</h1>
+            <p className="text-xs mt-0.5" style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}>{totalItems} items</p>
+          </div>
+          <button className="md:hidden mt-1 w-8 h-8 flex items-center justify-center rounded"
+            style={{ color: "#6b6870", border: "1px solid #2a2830" }}
+            onClick={() => setSidebarOpen(false)}>✕</button>
         </div>
 
         <nav className="flex flex-col gap-0.5 px-3 flex-1">
@@ -1064,7 +1116,10 @@ export default function App() {
       <main className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
 
         {/* Top bar */}
-        <header className="flex items-center gap-4 px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #2a2830" }}>
+        <header className="flex items-center gap-3 px-4 md:px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #2a2830" }}>
+          <button className="md:hidden w-9 h-9 flex items-center justify-center rounded shrink-0"
+            style={{ color: "#d4a843", border: "1px solid #2a2830", background: "#1a191f", fontSize: "1.1rem" }}
+            onClick={() => setSidebarOpen(true)}>☰</button>
           <div className="flex-1 flex items-center gap-2 min-w-0">
             {/* Breadcrumb */}
             {!selectedTypeId ? (
@@ -1091,17 +1146,17 @@ export default function App() {
           </div>
 
           {selectedTypeId && (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
               {selectedFolderId && (
                 <>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "#6b6870" }}>⌕</span>
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" style={{ color: "#6b6870" }}>⌕</span>
                     <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..."
-                      className="pl-8 pr-4 py-2 rounded text-sm outline-none w-40"
-                      style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1" }} />
+                      className="pl-7 pr-3 py-2 rounded text-sm outline-none"
+                      style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1", width: 120 }} />
                   </div>
                   <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "all")}
-                    className="px-3 py-2 rounded text-sm outline-none"
+                    className="px-2 py-2 rounded text-sm outline-none"
                     style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1" }}>
                     <option value="all">All</option>
                     {(Object.keys(STATUS_LABELS) as Status[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
@@ -1109,15 +1164,15 @@ export default function App() {
                 </>
               )}
               <button onClick={() => { setNewFolderName(""); setModal("addFolder"); }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-opacity hover:opacity-80"
+                className="flex items-center gap-1 px-3 py-2 rounded text-sm font-medium transition-opacity hover:opacity-80"
                 style={{ background: "#1e1c24", color: "#d4a843", border: "1px solid #2a2830" }}>
-                <span>📁</span><span>New Folder</span>
+                <span>📁</span><span className="hidden sm:inline">New Folder</span>
               </button>
               {selectedFolderId && (
                 <button onClick={() => setModal("addItem")}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium hover:opacity-90"
+                  className="flex items-center gap-1 px-3 py-2 rounded text-sm font-medium hover:opacity-90"
                   style={{ background: "#d4a843", color: "#0d0d10" }}>
-                  <span>+</span><span>Add Item</span>
+                  <span>+</span><span className="hidden sm:inline">Add Item</span>
                 </button>
               )}
             </div>
@@ -1125,7 +1180,7 @@ export default function App() {
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {!selectedTypeId ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
               <span className="text-5xl opacity-20">📚</span>
