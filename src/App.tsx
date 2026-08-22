@@ -715,64 +715,7 @@ function FolderTree({
   );
 }
 
-// ─── cols dropdown ───────────────────────────────────────────────────────────
-
-const COL_OPTIONS: number[] = [1, 2, 3, 4, 5, 6, 8, 10];
-
-function GridIcon({ n, active }: { n: number; active: boolean }) {
-  const cols = Math.min(n, 4);
-  const color = active ? "#d4a843" : "#6b6870";
-  const w = (12 - (cols - 1) * 1.5) / cols;
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      {Array.from({ length: cols }).map((_, i) => (
-        <g key={i}>
-          <rect x={i * (w + 1.5)} y="0" width={w} height="6" rx="0.8" fill={color} />
-          <rect x={i * (w + 1.5)} y="8" width={w} height="6" rx="0.8" fill={color} />
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-function ColsDropdown({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-2 py-2 rounded text-xs"
-        style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1" }}>
-        <GridIcon n={value} active={false} />
-        <span style={{ color: "#6b6870" }}>{value}</span>
-        <span style={{ color: "#3a3848", fontSize: "0.6rem" }}>▾</span>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 rounded overflow-hidden z-50"
-          style={{ background: "#1a191f", border: "1px solid #2a2830", minWidth: 110 }}>
-          {COL_OPTIONS.map((n) => (
-            <button key={n} onClick={() => { onChange(n); setOpen(false); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors"
-              style={{ background: value === n ? "#2a2830" : "transparent", color: value === n ? "#d4a843" : "#a8a5a0" }}>
-              <GridIcon n={n} active={value === n} />
-              <span>{n} per row</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── media card ──────────────────────────────────────────────────────────────
+// ─── media card ─────────────────────────────────────────────────────────────
 
 function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => void; onDelete: () => void }) {
   const [hover, setHover] = useState(false);
@@ -780,7 +723,7 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
     <div className="relative flex flex-col rounded overflow-hidden group"
       style={{ background: STATUS_COLORS[item.status] + "33", border: `2px solid ${STATUS_COLORS[item.status]}` }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <div className="relative overflow-hidden" style={{ background: "#1a191f", height: 220 }}>
+      <div className="relative overflow-hidden" style={{ background: "#1a191f", paddingBottom: "148%" }}>
         <img src={item.cover || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&h=560&fit=crop&auto=format"}
           alt={item.title} className="absolute inset-0 w-full h-full object-contain transition-transform duration-500 group-hover:scale-105" />
         <div className="absolute inset-0 transition-opacity duration-200"
@@ -796,9 +739,8 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
       <div className="p-3 flex flex-col gap-1.5 flex-1">
         <div>
           <h3 className="font-medium leading-tight text-sm" style={{ color: "#e8e6e1", fontFamily: "DM Serif Display, serif" }}>{item.title}</h3>
-          <p className="text-xs mt-0.5" style={{ color: "#6b6870" }}>{item.year} · {item.genre}</p>
+          {item.year && <p className="text-xs mt-0.5" style={{ color: "#6b6870" }}>{item.year}</p>}
         </div>
-        {item.rating !== null && <StarRating value={item.rating} />}
         {item.notes && <p className="text-xs leading-relaxed line-clamp-2" style={{ color: "#a8a5a0" }}>{item.notes}</p>}
       </div>
       <div className="flex justify-center pb-3 px-3">
@@ -972,7 +914,7 @@ export default function App() {
   const [renameFolderCover, setRenameFolderCover] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [search, setSearch] = useState("");
-  const [cols, setCols] = useState(2);
+
 
   const typeMap = useMemo(() => Object.fromEntries(types.map((t) => [t.id, t])), [types]);
 
@@ -1173,42 +1115,39 @@ export default function App() {
       <main className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
 
         {/* Top bar */}
-        <header className="flex items-center gap-3 px-4 md:px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #2a2830" }}>
-          <button className="md:hidden w-9 h-9 flex items-center justify-center rounded shrink-0"
-            style={{ color: "#d4a843", border: "1px solid #2a2830", background: "#1a191f", fontSize: "1.1rem" }}
-            onClick={() => setSidebarOpen(true)}>☰</button>
-          <div className="flex-1" />
-          {selectedTypeId && (
-            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-              {selectedFolderId && (
-                <>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" style={{ color: "#6b6870" }}>⌕</span>
-                    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..."
-                      className="pl-7 pr-3 py-2 rounded text-sm outline-none"
-                      style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1", width: 120 }} />
-                  </div>
-                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "all")}
-                    className="px-2 py-2 rounded text-sm outline-none"
-                    style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1" }}>
-                    <option value="all">All</option>
-                    {(Object.keys(STATUS_LABELS) as Status[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                  </select>
-                  <ColsDropdown value={cols} onChange={setCols} />
-                </>
-              )}
-              <button onClick={() => { setNewFolderName(""); setModal("addFolder"); }}
-                className="flex items-center gap-1 px-3 py-2 rounded text-sm font-medium transition-opacity hover:opacity-80"
-                style={{ background: "#1e1c24", color: "#d4a843", border: "1px solid #2a2830" }}>
-                <span>📁</span><span className="hidden sm:inline">New Folder</span>
-              </button>
-              {selectedFolderId && (
-                <button onClick={() => setModal("addItem")}
-                  className="flex items-center gap-1 px-3 py-2 rounded text-sm font-medium hover:opacity-90"
-                  style={{ background: "#d4a843", color: "#0d0d10" }}>
-                  <span>+</span><span className="hidden sm:inline">Add Item</span>
+        <header className="flex flex-col shrink-0 px-4 md:px-6 py-3 gap-2" style={{ borderBottom: "1px solid #2a2830" }}>
+          {/* Row 1: hamburger + action buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button className="md:hidden w-9 h-9 flex items-center justify-center rounded shrink-0"
+              style={{ color: "#d4a843", border: "1px solid #2a2830", background: "#1a191f", fontSize: "1.1rem" }}
+              onClick={() => setSidebarOpen(true)}>☰</button>
+            <div className="flex-1" />
+            {selectedTypeId && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => { setNewFolderName(""); setModal("addFolder"); }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-opacity hover:opacity-80"
+                  style={{ background: "#1e1c24", color: "#d4a843", border: "1px solid #2a2830" }}>
+                  <span>📁</span><span>New Folder</span>
                 </button>
-              )}
+                {selectedFolderId && (
+                  <button onClick={() => setModal("addItem")}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium hover:opacity-90"
+                    style={{ background: "#d4a843", color: "#0d0d10" }}>
+                    <span>+</span><span>Add Item</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Row 2: filter (only when in a folder) */}
+          {selectedFolderId && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "all")}
+                className="px-2 py-2 rounded text-sm outline-none"
+                style={{ background: "#1a191f", border: "1px solid #2a2830", color: "#e8e6e1" }}>
+                <option value="all">All</option>
+                {(Object.keys(STATUS_LABELS) as Status[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              </select>
             </div>
           )}
         </header>
@@ -1258,7 +1197,7 @@ export default function App() {
                         style={{ background: "#1e1c24", color: "#d4a843", border: "1px solid #2a2830" }}>Add first item</button>
                     </div>
                   ) : (
-                    <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+                    <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))" }}>
                       {visibleItems.map((item) => (
                         <MediaCard key={item.id} item={item}
                           onEdit={() => { setEditingItem(item); setModal("editItem"); }}
