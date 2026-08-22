@@ -99,7 +99,7 @@ const EMOJI_OPTIONS = [
 
 // ─── API sync ────────────────────────────────────────────────────────────────
 
-const API = `http://${window.location.hostname}:3001/api/data`;
+const API = "/api/data";
 
 async function loadFromServer(): Promise<{ types: CollectionType[]; folders: Folder[]; items: MediaItem[] } | null> {
   try {

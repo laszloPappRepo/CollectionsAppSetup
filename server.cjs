@@ -3,16 +3,13 @@ const fs = require('fs')
 const path = require('path')
 
 const app = express()
-const PORT = process.env.API_PORT || 3001
+const PORT = process.env.PORT || 8443
 const DATA_FILE = path.join(__dirname, 'collections-data.json')
 
 app.use(express.json({ limit: '50mb' }))
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.header('Access-Control-Allow-Methods', 'GET, POST')
-  res.header('Access-Control-Allow-Headers', 'Content-Type')
-  next()
-})
+
+// Serve built frontend
+app.use(express.static(path.join(__dirname, 'dist')))
 
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) return { types: [], folders: [], items: [] }
@@ -37,6 +34,11 @@ app.post('/api/data', (req, res) => {
   }
 })
 
+// SPA fallback
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
+
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Collections API running on port ${PORT}`)
+  console.log(`Collections running on http://0.0.0.0:${PORT}`)
 })

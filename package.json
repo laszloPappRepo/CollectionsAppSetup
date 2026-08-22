@@ -10,12 +10,15 @@
     "preview": "vite preview",
     "format": "oxfmt",
     "server": "node server.cjs",
-    "start": "concurrently \"node server.cjs\" \"vite preview --host 0.0.0.0\"",
+    "start": "npm run build && node server.cjs",
+    "install-service": "node install-service.cjs",
+    "uninstall-service": "node install-service.cjs --uninstall",
     "electron:dev": "cross-env ELECTRON=true vite build && electron .",
     "electron:build": "cross-env ELECTRON=true vite build && electron-builder --win"
   },
   "dependencies": {
     "express": "^4.19.0",
+    "node-windows": "^1.0.0-beta.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
