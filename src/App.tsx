@@ -721,7 +721,7 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
   const [hover, setHover] = useState(false);
   return (
     <div className="relative flex flex-col rounded overflow-hidden group"
-      style={{ background: "#16151a", border: "1px solid #2a2830" }}
+      style={{ background: STATUS_COLORS[item.status] + "33", border: `2px solid ${STATUS_COLORS[item.status]}` }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div className="relative overflow-hidden" style={{ paddingBottom: "140%", background: "#1a191f" }}>
         <img src={item.cover || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&h=560&fit=crop&auto=format"}
