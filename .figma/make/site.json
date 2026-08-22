@@ -1,0 +1,11 @@
+{
+  "title": "Collections app",
+  "description": "Organize and manage digital collections effortlessly with a user-friendly interface designed for personal and professional use on your own server.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

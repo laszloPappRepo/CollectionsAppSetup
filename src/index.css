@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: #0d0d10;
+  --color-foreground: #e8e6e1;
+  --color-card: #16151a;
+  --color-card-foreground: #e8e6e1;
+  --color-primary: #d4a843;
+  --color-primary-foreground: #0d0d10;
+  --color-secondary: #1e1c24;
+  --color-secondary-foreground: #a8a5a0;
+  --color-muted: #1a191f;
+  --color-muted-foreground: #6b6870;
+  --color-accent: #d4a843;
+  --color-accent-foreground: #0d0d10;
+  --color-border: #2a2830;
+  --color-ring: #d4a843;
+  --radius: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #0d0d10;
+  color: #e8e6e1;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2830;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3848;
+}
