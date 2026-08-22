@@ -10,7 +10,7 @@ function createWindow() {
     title: 'Collections',
     backgroundColor: '#0d0d10',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },

@@ -127,6 +127,24 @@ function StarRating({ value, onChange }: { value: number | null; onChange?: (v: 
   );
 }
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+async function toLocalDataUrl(src: string): Promise<string> {
+  if (src.startsWith("data:")) return src;
+  try {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    throw new Error("Could not load image — the source site may block cross-origin access. Try uploading the image file directly instead.");
+  }
+}
+
 // ─── image editor ────────────────────────────────────────────────────────────
 
 type CropRect = { x: number; y: number; w: number; h: number };
@@ -364,6 +382,8 @@ function ImageEditor({ src, onSave, onCancel }: {
 function CoverDropzone({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [dragging, setDragging] = useState(false);
   const [editSrc, setEditSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadFile = (file: File) => {
@@ -371,6 +391,19 @@ function CoverDropzone({ value, onChange }: { value: string; onChange: (v: strin
     const reader = new FileReader();
     reader.onload = (e) => setEditSrc(e.target?.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const openEditor = async (src: string) => {
+    setLoadError(null);
+    setLoading(true);
+    try {
+      const dataUrl = await toLocalDataUrl(src);
+      setEditSrc(dataUrl);
+    } catch (e: any) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -410,12 +443,17 @@ function CoverDropzone({ value, onChange }: { value: string; onChange: (v: strin
           <span className="text-xs" style={{ color: "#a8a5a0", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cover Image</span>
           <span className="text-xs leading-relaxed" style={{ color: "#6b6870" }}>Drag or click to upload. Opens editor to crop &amp; zoom.</span>
           {value && (
-            <div className="flex gap-2 mt-1">
-              <button type="button" onClick={() => setEditSrc(value)} className="text-xs px-2 py-1 rounded"
-                style={{ color: "#d4a843", border: "1px solid #d4a84344", background: "#d4a84311" }}>Edit crop</button>
-              <button type="button" onClick={() => onChange("")} className="text-xs px-2 py-1 rounded"
-                style={{ color: "#f87171", border: "1px solid #f8717144", background: "#f8717111" }}>Remove</button>
-            </div>
+            <>
+              <div className="flex gap-2 mt-1 flex-wrap">
+                <button type="button" onClick={() => openEditor(value)} disabled={loading} className="text-xs px-2 py-1 rounded"
+                  style={{ color: "#d4a843", border: "1px solid #d4a84344", background: "#d4a84311", opacity: loading ? 0.6 : 1 }}>
+                  {loading ? "Loading…" : "Edit crop"}
+                </button>
+                <button type="button" onClick={() => onChange("")} className="text-xs px-2 py-1 rounded"
+                  style={{ color: "#f87171", border: "1px solid #f8717144", background: "#f8717111" }}>Remove</button>
+              </div>
+              {loadError && <p className="text-xs mt-1" style={{ color: "#f87171" }}>{loadError}</p>}
+            </>
           )}
         </div>
       </div>
@@ -703,6 +741,8 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
 function FolderCoverDropzone({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [dragging, setDragging] = useState(false);
   const [editSrc, setEditSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadFile = (file: File) => {
@@ -710,6 +750,19 @@ function FolderCoverDropzone({ value, onChange }: { value: string; onChange: (v:
     const reader = new FileReader();
     reader.onload = (e) => setEditSrc(e.target?.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const openEditor = async (src: string) => {
+    setLoadError(null);
+    setLoading(true);
+    try {
+      const dataUrl = await toLocalDataUrl(src);
+      setEditSrc(dataUrl);
+    } catch (e: any) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -746,9 +799,12 @@ function FolderCoverDropzone({ value, onChange }: { value: string; onChange: (v:
             onChange={(e) => { const f = e.target.files?.[0]; if (f) loadFile(f); }} />
         </label>
         {value && (
-          <button type="button" onClick={() => setEditSrc(value)} className="text-xs px-2 py-1 rounded self-start"
-            style={{ color: "#d4a843", border: "1px solid #d4a84344", background: "#d4a84311" }}>Edit crop</button>
+          <button type="button" onClick={() => openEditor(value)} disabled={loading} className="text-xs px-2 py-1 rounded self-start"
+            style={{ color: "#d4a843", border: "1px solid #d4a84344", background: "#d4a84311", opacity: loading ? 0.6 : 1 }}>
+            {loading ? "Loading…" : "Edit crop"}
+          </button>
         )}
+        {loadError && <p className="text-xs" style={{ color: "#f87171", maxWidth: 140 }}>{loadError}</p>}
       </div>
     </>
   );

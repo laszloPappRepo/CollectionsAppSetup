@@ -1,0 +1,160 @@
+Admin@Victus MINGW64 /c/CollectionsApp/CollectionsAppSetup-main/CollectionsAppSetup-main/.figma
+$ npm run electron:build
+
+> collections-app@1.0.0 electron:build
+> cross-env ELECTRON=true vite build && electron-builder --win
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:29:27). Use `import.meta.dirname` instead
+  - JSON import "./.figma/make/site.json" without import attributes (vite.config.ts:6:31). Add `with { type: 'json' }`
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.2.2 building client environment for production...
+✓ 16 modules transformed.
+computing gzip size...
+dist/robots.txt                   0.02 kB │ gzip:  0.04 kB
+dist/index.html                   0.91 kB │ gzip:  0.41 kB
+dist/assets/index-CgfJbAlR.css   17.46 kB │ gzip:  4.31 kB
+dist/assets/index-CsnBmgw9.js   240.75 kB │ gzip: 70.67 kB
+
+✓ built in 2.67s
+  • electron-builder  version=25.1.8 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\CollectionsApp\CollectionsAppSetup-main\CollectionsAppSetup-main\package.json
+  • author is missed in the package.json  appPackageFile=C:\CollectionsApp\CollectionsAppSetup-main\CollectionsAppSetup-main\package.json
+  • writing effective config  file=dist-electron\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=33.4.11 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=33.4.11 appOutDir=dist-electron\win-unpacked
+  • downloading     url=https://github.com/electron/electron/releases/download/v33.4.11/electron-v33.4.11-win32-x64.zip size=115 MB parts=8
+  • downloaded      url=https://github.com/electron/electron/releases/download/v33.4.11/electron-v33.4.11-win32-x64.zip duration=1.573s
+  • updating asar integrity executable resource  executablePath=dist-electron\win-unpacked\Collections.exe
+  • default Electron icon is used  reason=application icon is not set
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=695ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\097972047.7z
+    --
+    Path = C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\097972047.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\097972047\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\097972047\darwin\10.12\lib\libssl.dylib
+
+                    command='C:\CollectionsApp\CollectionsAppSetup-main\CollectionsAppSetup-main\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\097972047.7z' '-oC:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\097972047'
+                    workingDir=C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=422ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\115591007.7z
+    --
+    Path = C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\115591007.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\115591007\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\115591007\darwin\10.12\lib\libssl.dylib
+
+                    command='C:\CollectionsApp\CollectionsAppSetup-main\CollectionsAppSetup-main\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\115591007.7z' '-oC:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\115591007'
+                    workingDir=C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=361ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\647414319.7z
+    --
+    Path = C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\647414319.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\647414319\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\647414319\darwin\10.12\lib\libssl.dylib
+
+                    command='C:\CollectionsApp\CollectionsAppSetup-main\CollectionsAppSetup-main\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\647414319.7z' '-oC:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\647414319'
+                    workingDir=C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=417ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\161260303.7z
+    --
+    Path = C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\161260303.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\161260303\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : Az �gyf�lnek nincs meg a sz�ks�ges joga. : C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\161260303\darwin\10.12\lib\libssl.dylib
+
+                    command='C:\CollectionsApp\CollectionsAppSetup-main\CollectionsAppSetup-main\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\161260303.7z' '-oC:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign\161260303'
+                    workingDir=C:\Users\Admin\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
