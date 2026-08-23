@@ -17,8 +17,27 @@ function loadData() {
   catch { return { types: [], folders: [], items: [] } }
 }
 
+// Google Drive for Desktop sync folder — update this path if yours differs
+const GDRIVE_BACKUP = process.env.GDRIVE_PATH ||
+  path.join(process.env.USERPROFILE || process.env.HOME || '', 'Google Drive', 'My Drive', 'collections-backup')
+
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8')
+}
+
+let backupTimer = null
+function scheduleGDriveBackup() {
+  if (backupTimer) clearTimeout(backupTimer)
+  backupTimer = setTimeout(() => {
+    try {
+      if (!fs.existsSync(GDRIVE_BACKUP)) fs.mkdirSync(GDRIVE_BACKUP, { recursive: true })
+      const dest = path.join(GDRIVE_BACKUP, 'collections-data.json')
+      fs.copyFileSync(DATA_FILE, dest)
+      console.log('[backup] copied to Google Drive')
+    } catch (e) {
+      console.error('[backup] Google Drive copy failed:', e.message)
+    }
+  }, 5000)
 }
 
 app.get('/api/data', (req, res) => {
@@ -28,6 +47,7 @@ app.get('/api/data', (req, res) => {
 app.post('/api/data', (req, res) => {
   try {
     saveData(req.body)
+    scheduleGDriveBackup()
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })

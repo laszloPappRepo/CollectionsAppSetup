@@ -498,9 +498,12 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
 
 // ─── item form ───────────────────────────────────────────────────────────────
 
-type ItemFormData = { title: string; status: Status; rating: string; year: string; genre: string; cover: string; notes: string };
+type ItemFormData = { title: string; status: Status; rating: string; year: string; genre: string; cover: string; notes: string; folderId: string };
 
-function ItemForm({ initial, onSave, onCancel }: { initial: ItemFormData; onSave: (d: ItemFormData) => void; onCancel: () => void }) {
+function ItemForm({ initial, onSave, onCancel, folders, typeId }: {
+  initial: ItemFormData; onSave: (d: ItemFormData) => void; onCancel: () => void;
+  folders?: Folder[]; typeId?: string;
+}) {
   const [form, setForm] = useState(initial);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const inputClass = "w-full rounded px-3 py-2 text-sm outline-none";
@@ -539,6 +542,16 @@ function ItemForm({ initial, onSave, onCancel }: { initial: ItemFormData; onSave
           <label style={labelStyle}>Notes</label>
           <textarea className={inputClass} style={inputStyle} value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder="Personal thoughts, progress notes..." />
         </div>
+        {folders && typeId && (
+          <div className="col-span-2 flex flex-col gap-1">
+            <label style={labelStyle}>Move to Folder</label>
+            <select className={inputClass} style={inputStyle} value={form.folderId} onChange={(e) => set("folderId", e.target.value)}>
+              {folders.filter((f) => f.typeId === typeId).map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <div className="flex gap-3 justify-end">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded text-sm font-medium" style={{ background: "#1a191f", color: "#a8a5a0", border: "1px solid #2a2830" }}>Cancel</button>
@@ -548,7 +561,7 @@ function ItemForm({ initial, onSave, onCancel }: { initial: ItemFormData; onSave
   );
 }
 
-const BLANK_ITEM: ItemFormData = { title: "", status: "owned", rating: "", year: new Date().getFullYear().toString(), genre: "", cover: "", notes: "" };
+const BLANK_ITEM: ItemFormData = { title: "", status: "owned", rating: "", year: new Date().getFullYear().toString(), genre: "", cover: "", notes: "", folderId: "" };
 
 // ─── manage types modal ──────────────────────────────────────────────────────
 
@@ -701,7 +714,7 @@ function FolderTree({
               }}
             >
               <span className="text-xs opacity-50">{hasChildren ? "▸" : "·"}</span>
-              <span className="flex-1 truncate">{folder.name}</span>
+              <span className="flex-1 leading-snug">{folder.name}</span>
               <span className="text-xs shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: "#3a3848" }}>{subCount}</span>
             </button>
             {isSelected || folders.some((f) => f.parentId === folder.id) ? (
@@ -715,16 +728,45 @@ function FolderTree({
   );
 }
 
+// ─── lightbox ────────────────────────────────────────────────────────────────
+
+function Lightbox({ src, title, onClose }: { src: string; title: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.92)" }}
+      onClick={onClose}>
+      <img src={src} alt={title}
+        className="max-w-full max-h-full rounded shadow-2xl"
+        style={{ objectFit: "contain", maxHeight: "90vh", maxWidth: "90vw" }}
+        onClick={(e) => e.stopPropagation()} />
+      <button onClick={onClose}
+        className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full text-lg"
+        style={{ background: "#1a191f", color: "#e8e6e1", border: "1px solid #2a2830" }}>✕</button>
+    </div>
+  );
+}
+
 // ─── media card ─────────────────────────────────────────────────────────────
 
 function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => void; onDelete: () => void }) {
   const [hover, setHover] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
+  const imgSrc = item.cover || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&h=560&fit=crop&auto=format";
   return (
+    <>
+      {lightbox && <Lightbox src={imgSrc} title={item.title} onClose={() => setLightbox(false)} />}
     <div className="relative flex flex-col rounded overflow-hidden group"
       style={{ background: STATUS_COLORS[item.status] + "33", border: `2px solid ${STATUS_COLORS[item.status]}` }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <div className="relative overflow-hidden" style={{ background: "#1a191f", paddingBottom: "148%" }}>
-        <img src={item.cover || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&h=560&fit=crop&auto=format"}
+      <div className="relative overflow-hidden cursor-zoom-in" style={{ background: "#1a191f", paddingBottom: "148%" }}
+        onClick={() => setLightbox(true)}>
+        <img src={imgSrc}
           alt={item.title} className="absolute inset-0 w-full h-full object-contain transition-transform duration-500 group-hover:scale-105" />
         <div className="absolute inset-0 transition-opacity duration-200"
           style={{ background: "linear-gradient(to top, rgba(13,13,16,0.95) 0%, rgba(13,13,16,0.3) 50%, transparent 100%)", opacity: hover ? 1 : 0.6 }} />
@@ -736,20 +778,19 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
           </div>
         )}
       </div>
-      <div className="p-3 flex flex-col gap-1.5 flex-1">
-        <div>
-          <h3 className="font-medium leading-tight text-sm" style={{ color: "#e8e6e1", fontFamily: "DM Serif Display, serif" }}>{item.title}</h3>
-          {item.year && <p className="text-xs mt-0.5" style={{ color: "#6b6870" }}>{item.year}</p>}
-        </div>
+      <div className="px-2 pt-2 flex flex-col gap-1 items-center text-center">
+        <h3 className="font-medium leading-tight text-sm" style={{ color: "#e8e6e1", fontFamily: "DM Serif Display, serif" }}>{item.title}</h3>
+        {item.year && <p className="text-xs" style={{ color: "#6b6870" }}>{item.year}</p>}
         {item.notes && <p className="text-xs leading-relaxed line-clamp-2" style={{ color: "#a8a5a0" }}>{item.notes}</p>}
       </div>
-      <div className="flex justify-center pb-3 px-3">
+      <div className="flex justify-center px-2 py-2 mt-auto">
         <span className="text-xs px-3 py-0.5 rounded-sm font-medium"
           style={{ background: STATUS_COLORS[item.status] + "22", color: STATUS_COLORS[item.status], border: `1px solid ${STATUS_COLORS[item.status]}44`, fontFamily: "JetBrains Mono, monospace" }}>
           {STATUS_LABELS[item.status]}
         </span>
       </div>
     </div>
+    </>
   );
 }
 
@@ -850,7 +891,7 @@ function FolderCard({ folder, itemCount, subfolderCount, onClick, onRename, onDe
         )}
       </div>
       <div className="p-3 flex flex-col gap-1">
-        <p className="text-sm font-medium truncate" style={{ color: "#e8e6e1", fontFamily: "DM Serif Display, serif" }}>{folder.name}</p>
+        <p className="text-sm font-medium leading-snug" style={{ color: "#e8e6e1", fontFamily: "DM Serif Display, serif" }}>{folder.name}</p>
         <p className="text-xs" style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}>
           {subfolderCount > 0 ? `${subfolderCount} folder${subfolderCount !== 1 ? "s" : ""} · ` : ""}{itemCount} item{itemCount !== 1 ? "s" : ""}
         </p>
@@ -1012,7 +1053,11 @@ export default function App() {
       ...i, title: data.title, status: data.status,
       rating: data.rating ? parseInt(data.rating) : null, year: parseInt(data.year),
       genre: data.genre, cover: data.cover, notes: data.notes,
+      folderId: data.folderId || i.folderId,
     }));
+    if (data.folderId && data.folderId !== editingItem.folderId) {
+      setSelectedFolderId(data.folderId);
+    }
     setModal(null); setEditingItem(null);
   };
 
@@ -1033,7 +1078,7 @@ export default function App() {
   };
 
   const editForm: ItemFormData = editingItem
-    ? { title: editingItem.title, status: editingItem.status, rating: editingItem.rating?.toString() ?? "", year: editingItem.year.toString(), genre: editingItem.genre, cover: editingItem.cover, notes: editingItem.notes }
+    ? { title: editingItem.title, status: editingItem.status, rating: editingItem.rating?.toString() ?? "", year: editingItem.year.toString(), genre: editingItem.genre, cover: editingItem.cover, notes: editingItem.notes, folderId: editingItem.folderId }
     : BLANK_ITEM;
 
   const currentType = selectedTypeId ? typeMap[selectedTypeId] : null;
@@ -1161,6 +1206,12 @@ export default function App() {
             </div>
           ) : (
             <div className="flex flex-col gap-8">
+              {/* Folder title */}
+              {currentFolder && (
+                <h2 style={{ fontFamily: "DM Serif Display, serif", fontSize: "1.6rem", color: "#e8e6e1", lineHeight: 1.2 }}>
+                  {currentFolder.name}
+                </h2>
+              )}
               {/* Subfolders */}
               {visibleSubfolders.length > 0 && (
                 <div>
@@ -1314,7 +1365,8 @@ export default function App() {
 
       {modal === "editItem" && editingItem && (
         <Modal title={`Edit — ${editingItem.title}`} onClose={() => { setModal(null); setEditingItem(null); }} wide>
-          <ItemForm initial={editForm} onSave={editItem} onCancel={() => { setModal(null); setEditingItem(null); }} />
+          <ItemForm initial={editForm} onSave={editItem} onCancel={() => { setModal(null); setEditingItem(null); }}
+            folders={folders} typeId={folders.find((f) => f.id === editingItem.folderId)?.typeId} />
         </Modal>
       )}
 
