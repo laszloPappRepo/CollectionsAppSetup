@@ -17,9 +17,8 @@ function loadData() {
   catch { return { types: [], folders: [], items: [] } }
 }
 
-// Google Drive for Desktop sync folder — update this path if yours differs
 const GDRIVE_BACKUP = process.env.GDRIVE_PATH ||
-  path.join(process.env.USERPROFILE || process.env.HOME || '', 'Google Drive', 'My Drive', 'collections-backup')
+  'C:\\Users\\gemini20\\Google Drive\\MyDrive\\CollectionsApp'
 
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8')
