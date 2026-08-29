@@ -111,9 +111,20 @@ async function loadFromServer(): Promise<{ types: CollectionType[]; folders: Fol
   } catch { return null; }
 }
 
-async function saveToServer(types: CollectionType[], folders: Folder[], items: MediaItem[]) {
-  try { await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types, folders, items }) }); }
-  catch { /* offline — data still in localStorage */ }
+async function saveToServer(types: CollectionType[], folders: Folder[], items: MediaItem[], deletedIds: string[] = []) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const metadataResponse = await fetch("/api/meta", { method: "POST", headers, body: JSON.stringify({ types, folders }) });
+    if (!metadataResponse.ok) throw new Error(`Metadata save failed: ${metadataResponse.status}`);
+    const itemResponses = await Promise.all(items.map((item) => fetch(`/api/items/${encodeURIComponent(item.id)}`, {
+      method: "PUT", headers, body: JSON.stringify(item),
+    })));
+    if (itemResponses.some((response) => !response.ok)) throw new Error("Item save failed");
+    const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" })));
+    if (deleteResponses.some((response) => !response.ok)) throw new Error("Item deletion failed");
+    return true;
+  }
+  catch { /* offline — data remains in the current app state */ return false; }
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -917,6 +928,7 @@ export default function App() {
   const [folders, setFolders] = useState<Folder[]>(INITIAL_FOLDERS);
   const [items, setItems] = useState<MediaItem[]>(INITIAL_ITEMS);
   const [loaded, setLoaded] = useState(false);
+  const serverItemIds = useRef<Set<string> | null>(null);
 
   // load from server on mount
   useEffect(() => {
@@ -925,6 +937,7 @@ export default function App() {
         setTypes(data.types);
         setFolders(data.folders);
         setItems(data.items);
+        serverItemIds.current = new Set(data.items.map((item) => item.id));
       }
       setLoaded(true);
     });
@@ -935,7 +948,15 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveToServer(types, folders, items), 800);
+    saveTimer.current = setTimeout(() => {
+      const currentIds = new Set(items.map((item) => item.id));
+      const deletedIds = serverItemIds.current
+        ? [...serverItemIds.current].filter((id) => !currentIds.has(id))
+        : [];
+      saveToServer(types, folders, items, deletedIds).then((saved) => {
+        if (saved) serverItemIds.current = currentIds;
+      });
+    }, 800);
   }, [types, folders, items, loaded]);
 
   // navigation
@@ -1063,6 +1084,9 @@ export default function App() {
 
   const deleteItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
+    // Delete immediately as well as through the debounced full-state sync.
+    // This prevents a removed item from returning after a page reload.
+    fetch(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
     setDeleteItemId(null); setModal(null);
   };
 

@@ -5,15 +5,28 @@ const path = require('path')
 const app = express()
 const PORT = process.env.PORT || 8443
 const DATA_FILE = path.join(__dirname, 'collections-data.json')
+const STORAGE_DIR = path.join(__dirname, 'collections-data')
+const META_FILE = path.join(STORAGE_DIR, 'metadata.json')
+const ITEMS_DIR = path.join(STORAGE_DIR, 'items')
 
-app.use(express.json({ limit: '50mb' }))
+app.use(express.json({ limit: '100mb' }))
 
 // Serve built frontend
 app.use(express.static(path.join(__dirname, 'dist')))
 
 function loadData() {
-  if (!fs.existsSync(DATA_FILE)) return { types: [], folders: [], items: [] }
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }
+  try {
+    if (fs.existsSync(META_FILE)) {
+      const metadata = JSON.parse(fs.readFileSync(META_FILE, 'utf8'))
+      const items = fs.existsSync(ITEMS_DIR)
+        ? fs.readdirSync(ITEMS_DIR).filter((name) => name.endsWith('.json'))
+            .map((name) => JSON.parse(fs.readFileSync(path.join(ITEMS_DIR, name), 'utf8')))
+        : []
+      return { types: metadata.types || [], folders: metadata.folders || [], items }
+    }
+    if (!fs.existsSync(DATA_FILE)) return { types: [], folders: [], items: [] }
+    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))
+  }
   catch { return { types: [], folders: [], items: [] } }
 }
 
@@ -21,7 +34,23 @@ const GDRIVE_BACKUP = process.env.GDRIVE_PATH ||
   'C:\\Users\\gemini20\\Google Drive\\MyDrive\\CollectionsApp'
 
 function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8')
+  saveMetadata(data.types || [], data.folders || [])
+  for (const item of data.items || []) saveItem(item)
+}
+
+function itemPath(id) {
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Invalid item id')
+  return path.join(ITEMS_DIR, `${id}.json`)
+}
+
+function saveItem(item) {
+  fs.mkdirSync(ITEMS_DIR, { recursive: true })
+  fs.writeFileSync(itemPath(item.id), JSON.stringify(item, null, 2), 'utf8')
+}
+
+function saveMetadata(types, folders) {
+  fs.mkdirSync(STORAGE_DIR, { recursive: true })
+  fs.writeFileSync(META_FILE, JSON.stringify({ types, folders }, null, 2), 'utf8')
 }
 
 let backupTimer = null
@@ -30,8 +59,8 @@ function scheduleGDriveBackup() {
   backupTimer = setTimeout(() => {
     try {
       if (!fs.existsSync(GDRIVE_BACKUP)) fs.mkdirSync(GDRIVE_BACKUP, { recursive: true })
-      const dest = path.join(GDRIVE_BACKUP, 'collections-data.json')
-      fs.copyFileSync(DATA_FILE, dest)
+      const dest = path.join(GDRIVE_BACKUP, 'collections-data')
+      fs.cpSync(STORAGE_DIR, dest, { recursive: true })
       console.log('[backup] copied to Google Drive')
     } catch (e) {
       console.error('[backup] Google Drive copy failed:', e.message)
@@ -51,6 +80,25 @@ app.post('/api/data', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
+})
+
+app.post('/api/meta', (req, res) => {
+  try { saveMetadata(req.body.types || [], req.body.folders || []); scheduleGDriveBackup(); res.json({ ok: true }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.put('/api/items/:id', (req, res) => {
+  try { saveItem({ ...req.body, id: req.params.id }); scheduleGDriveBackup(); res.json({ ok: true }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/api/items/:id', (req, res) => {
+  try {
+    const file = itemPath(req.params.id)
+    if (fs.existsSync(file)) fs.unlinkSync(file)
+    scheduleGDriveBackup()
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // SPA fallback
