@@ -120,7 +120,11 @@ function loadFromLocalStorage(): AppData | null {
 
 function saveToLocalStorage(data: AppData) {
   try {
-    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    const lightweightData = {
+      ...data,
+      items: data.items.map(({ cover: _cover, ...item }) => item),
+    };
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightweightData));
   } catch {
     // Browser storage can be unavailable or full; server sync remains available.
   }
@@ -128,7 +132,7 @@ function saveToLocalStorage(data: AppData) {
 
 async function loadFromServer(): Promise<AppData | null> {
   try {
-    const res = await fetch(API);
+    const res = await fetch(`${API}?summary=1`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.types?.length && !data.folders?.length && !data.items?.length) return null;
@@ -1108,6 +1112,32 @@ export default function App() {
       return true;
     }).sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" }));
   }, [selectedFolderId, items, statusFilter, search]);
+
+  // Covers are the large part of the collection export. Load them only for
+  // cards that are currently visible instead of blocking startup on every item.
+  const loadedCoverIds = useRef(new Set<string>());
+  const loadingCoverIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (!selectedFolderId) return;
+    for (const item of visibleItems) {
+      if (item.cover || loadedCoverIds.current.has(item.id) || loadingCoverIds.current.has(item.id)) continue;
+      loadingCoverIds.current.add(item.id);
+      fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`))
+        .then((response) => response.ok ? response.json() : null)
+        .then((fullItem) => {
+          if (fullItem?.cover) {
+            setItems((current) => current.map((candidate) => candidate.id === item.id
+              ? { ...candidate, cover: fullItem.cover }
+              : candidate));
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          loadingCoverIds.current.delete(item.id);
+          loadedCoverIds.current.add(item.id);
+        });
+    }
+  }, [selectedFolderId, visibleItems]);
 
   const totalItems = useMemo(() => items.length, [items]);
 

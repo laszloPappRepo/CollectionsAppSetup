@@ -111,7 +111,11 @@ function scheduleGDriveBackup() {
 }
 
 app.get('/api/data', (req, res) => {
-  res.json(loadData())
+  const data = loadData()
+  if (req.query.summary === '1') {
+    return res.json({ ...data, items: data.items.map(({ cover, ...item }) => item) })
+  }
+  res.json(data)
 })
 
 app.post('/api/data', (req, res) => {
@@ -129,8 +133,22 @@ app.post('/api/meta', (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+app.get('/api/items/:id', (req, res) => {
+  try {
+    const file = itemPath(req.params.id)
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Item not found' })
+    res.json(JSON.parse(fs.readFileSync(file, 'utf8')))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 app.put('/api/items/:id', (req, res) => {
-  try { saveItem({ ...req.body, id: req.params.id }); scheduleGDriveBackup(); res.json({ ok: true }) }
+  try {
+    const file = itemPath(req.params.id)
+    const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {}
+    saveItem({ ...previous, ...req.body, id: req.params.id })
+    scheduleGDriveBackup()
+    res.json({ ok: true })
+  }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 
