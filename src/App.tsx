@@ -717,10 +717,13 @@ function ManageTypesModal({ types, folders, items, onSave, onClose }: {
 
 function FolderTree({
   folders, items, typeId, parentId = null, depth = 0,
-  selectedFolderId, onSelectFolder,
+  selectedFolderId, onSelectFolder, onMoveFolder, onMoveItem, expandedFolderIds, onToggleFolder,
 }: {
   folders: Folder[]; items: MediaItem[]; typeId: string; parentId?: string | null; depth?: number;
   selectedFolderId: string | null; onSelectFolder: (id: string) => void;
+  onMoveFolder: (folderId: string, parentId: string | null) => void;
+  onMoveItem: (itemId: string, folderId: string) => void;
+  expandedFolderIds: Set<string>; onToggleFolder: (id: string) => void;
 }) {
   const children = folders.filter((f) => f.typeId === typeId && f.parentId === parentId);
   if (children.length === 0) return null;
@@ -733,12 +736,35 @@ function FolderTree({
           return allIds.includes(i.folderId);
         }).length;
         const hasChildren = folders.some((f) => f.parentId === folder.id);
+        const isExpanded = expandedFolderIds.has(folder.id);
         const isSelected = selectedFolderId === folder.id;
 
         return (
           <div key={folder.id}>
             <button
               onClick={() => onSelectFolder(folder.id)}
+              aria-expanded={hasChildren ? isExpanded : undefined}
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData("application/x-collection-folder", folder.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("application/x-collection-folder") || e.dataTransfer.types.includes("application/x-collection-item")) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = "move";
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const folderId = e.dataTransfer.getData("application/x-collection-folder");
+                const itemId = e.dataTransfer.getData("application/x-collection-item");
+                if (folderId) onMoveFolder(folderId, folder.id);
+                else if (itemId) onMoveItem(itemId, folder.id);
+              }}
               className="w-full flex items-center gap-1.5 py-1.5 rounded text-sm text-left transition-colors"
               style={{
                 paddingLeft: `${(depth + 1) * 12 + 12}px`,
@@ -747,13 +773,19 @@ function FolderTree({
                 color: isSelected ? "#e8e6e1" : "#6b6870",
               }}
             >
-              <span className="text-xs opacity-50">{hasChildren ? "▸" : "·"}</span>
+              <span
+                className="text-xs opacity-50 w-3 text-center"
+                onClick={(e) => { e.stopPropagation(); if (hasChildren) onToggleFolder(folder.id); }}
+                title={hasChildren ? (isExpanded ? "Collapse folder" : "Expand folder") : undefined}
+              >{hasChildren ? (isExpanded ? "▾" : "▸") : "·"}</span>
               <span className="flex-1 leading-snug">{folder.name}</span>
               <span className="text-xs shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: "#3a3848" }}>{subCount}</span>
             </button>
-            {isSelected || folders.some((f) => f.parentId === folder.id) ? (
+            {isExpanded ? (
               <FolderTree folders={folders} items={items} typeId={typeId} parentId={folder.id}
-                depth={depth + 1} selectedFolderId={selectedFolderId} onSelectFolder={onSelectFolder} />
+                depth={depth + 1} selectedFolderId={selectedFolderId} onSelectFolder={onSelectFolder}
+                onMoveFolder={onMoveFolder} onMoveItem={onMoveItem}
+                expandedFolderIds={expandedFolderIds} onToggleFolder={onToggleFolder} />
             ) : null}
           </div>
         );
@@ -796,6 +828,12 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
     <>
       {lightbox && <Lightbox src={imgSrc} title={item.title} onClose={() => setLightbox(false)} />}
     <div className="relative flex flex-col rounded overflow-hidden group"
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.setData("application/x-collection-item", item.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       style={{ background: STATUS_COLORS[item.status] + "33", border: `2px solid ${STATUS_COLORS[item.status]}` }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div className="relative overflow-hidden cursor-zoom-in" style={{ background: "#1a191f", paddingBottom: "148%" }}
@@ -904,13 +942,36 @@ function FolderCoverDropzone({ value, onChange }: { value: string; onChange: (v:
 
 // ─── folder card (shown in main area) ────────────────────────────────────────
 
-function FolderCard({ folder, itemCount, subfolderCount, onClick, onRename, onDelete }: {
+function FolderCard({ folder, itemCount, subfolderCount, onClick, onRename, onDelete, onMoveFolder, onMoveItem }: {
   folder: Folder; itemCount: number; subfolderCount: number;
   onClick: () => void; onRename: () => void; onDelete: () => void;
+  onMoveFolder: (folderId: string, parentId: string | null) => void;
+  onMoveItem: (itemId: string, folderId: string) => void;
 }) {
   const [hover, setHover] = useState(false);
   return (
     <div className="relative flex flex-col rounded cursor-pointer overflow-hidden group"
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.setData("application/x-collection-folder", folder.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/x-collection-folder") || e.dataTransfer.types.includes("application/x-collection-item")) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "move";
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const folderId = e.dataTransfer.getData("application/x-collection-folder");
+        const itemId = e.dataTransfer.getData("application/x-collection-item");
+        if (folderId) onMoveFolder(folderId, folder.id);
+        else if (itemId) onMoveItem(itemId, folder.id);
+      }}
       style={{ background: "#16151a", border: `1px solid ${hover ? "#3a3848" : "#2a2830"}`, transition: "border-color 0.15s" }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={onClick}>
@@ -989,6 +1050,7 @@ export default function App() {
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(["movie"]));
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
 
   // modals
   const [modal, setModal] = useState<"addItem" | "editItem" | "addFolder" | "renameFolder" | "deleteFolder" | "deleteItem" | "types" | null>(null);
@@ -1051,6 +1113,30 @@ export default function App() {
     setSelectedFolderId(id);
     setExpandedTypes((s) => new Set([...s, folder.typeId]));
     setSidebarOpen(false);
+  };
+
+  const toggleFolder = (id: string) => {
+    setExpandedFolderIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const moveItem = (itemId: string, folderId: string) => {
+    if (!folders.some((folder) => folder.id === folderId)) return;
+    setItems((prev) => prev.map((item) => item.id === itemId ? { ...item, folderId } : item));
+  };
+
+  const moveFolder = (folderId: string, parentId: string | null) => {
+    const source = folders.find((folder) => folder.id === folderId);
+    if (!source) return;
+    if (parentId) {
+      const target = folders.find((folder) => folder.id === parentId);
+      const descendants = getAllDescendantFolderIds(source.id, folders);
+      if (!target || source.typeId !== target.typeId || source.id === target.id || descendants.includes(target.id)) return;
+    }
+    setFolders((prev) => prev.map((folder) => folder.id === source.id ? { ...folder, parentId } : folder));
   };
 
   const addFolder = () => {
@@ -1182,6 +1268,17 @@ export default function App() {
               <div key={type.id}>
                 <button
                   onClick={() => selectType(type.id)}
+                  onDragOver={(e) => {
+                    if (e.dataTransfer.types.includes("application/x-collection-folder")) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const folderId = e.dataTransfer.getData("application/x-collection-folder");
+                    if (folderId && folders.some((folder) => folder.id === folderId && folder.typeId === type.id)) moveFolder(folderId, null);
+                  }}
                   className="w-full flex items-center justify-between px-3 py-2 rounded text-sm transition-colors text-left"
                   style={{ background: isActive && !selectedFolderId ? "#1e1c24" : "transparent", color: isActive ? "#e8e6e1" : "#6b6870" }}
                 >
@@ -1193,7 +1290,9 @@ export default function App() {
                 </button>
                 {isExpanded && (
                   <FolderTree folders={folders} items={items} typeId={type.id}
-                    selectedFolderId={selectedFolderId} onSelectFolder={selectFolder} />
+                    selectedFolderId={selectedFolderId} onSelectFolder={selectFolder}
+                    onMoveFolder={moveFolder} onMoveItem={moveItem}
+                    expandedFolderIds={expandedFolderIds} onToggleFolder={toggleFolder} />
                 )}
               </div>
             );
@@ -1275,6 +1374,7 @@ export default function App() {
                       return (
                         <FolderCard key={folder.id} folder={folder} itemCount={itemCount} subfolderCount={subfolderCount}
                           onClick={() => selectFolder(folder.id)}
+                          onMoveFolder={moveFolder} onMoveItem={moveItem}
                           onRename={() => { setTargetFolder(folder); setRenameFolderName(folder.name); setRenameFolderCover(folder.cover ?? ""); setModal("renameFolder"); }}
                           onDelete={() => { setTargetFolder(folder); setModal("deleteFolder"); }} />
                       );
