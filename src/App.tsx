@@ -100,8 +100,31 @@ const EMOJI_OPTIONS = [
 // ─── API sync ────────────────────────────────────────────────────────────────
 
 const API = "/api/data";
+const LOCAL_STORAGE_KEY = "collections-app-data";
 
-async function loadFromServer(): Promise<{ types: CollectionType[]; folders: Folder[]; items: MediaItem[] } | null> {
+type AppData = { types: CollectionType[]; folders: Folder[]; items: MediaItem[] };
+
+function loadFromLocalStorage(): AppData | null {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as Partial<AppData>;
+    if (!Array.isArray(data.types) || !Array.isArray(data.folders) || !Array.isArray(data.items)) return null;
+    return { types: data.types, folders: data.folders, items: data.items };
+  } catch {
+    return null;
+  }
+}
+
+function saveToLocalStorage(data: AppData) {
+  try {
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Browser storage can be unavailable or full; server sync remains available.
+  }
+}
+
+async function loadFromServer(): Promise<AppData | null> {
   try {
     const res = await fetch(API);
     if (!res.ok) return null;
@@ -933,11 +956,12 @@ export default function App() {
   // load from server on mount
   useEffect(() => {
     loadFromServer().then((data) => {
-      if (data) {
-        setTypes(data.types);
-        setFolders(data.folders);
-        setItems(data.items);
-        serverItemIds.current = new Set(data.items.map((item) => item.id));
+      const savedData = data ?? loadFromLocalStorage();
+      if (savedData) {
+        setTypes(savedData.types);
+        setFolders(savedData.folders);
+        setItems(savedData.items);
+        if (data) serverItemIds.current = new Set(data.items.map((item) => item.id));
       }
       setLoaded(true);
     });
@@ -947,6 +971,7 @@ export default function App() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!loaded) return;
+    saveToLocalStorage({ types, folders, items });
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const currentIds = new Set(items.map((item) => item.id));

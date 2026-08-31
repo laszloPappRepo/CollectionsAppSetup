@@ -22,12 +22,40 @@ function loadData() {
         ? fs.readdirSync(ITEMS_DIR).filter((name) => name.endsWith('.json'))
             .map((name) => JSON.parse(fs.readFileSync(path.join(ITEMS_DIR, name), 'utf8')))
         : []
-      return { types: metadata.types || [], folders: metadata.folders || [], items }
+      return normalizeData({ types: metadata.types || [], folders: metadata.folders || [], items })
     }
     if (!fs.existsSync(DATA_FILE)) return { types: [], folders: [], items: [] }
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))
+    return normalizeData(JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')))
   }
   catch { return { types: [], folders: [], items: [] } }
+}
+
+// Older exports contain item files whose folder records were not included in
+// metadata.json. Keep those items usable instead of silently orphaning them.
+function normalizeData(data) {
+  const types = Array.isArray(data.types) ? [...data.types] : []
+  const folders = Array.isArray(data.folders) ? [...data.folders] : []
+  const items = Array.isArray(data.items) ? data.items : []
+  const knownFolderIds = new Set(folders.map((folder) => folder.id))
+  const missingFolderIds = [...new Set(items
+    .map((item) => item.folderId)
+    .filter((folderId) => typeof folderId === 'string' && !knownFolderIds.has(folderId)))]
+
+  if (missingFolderIds.length === 0) return { types, folders, items }
+
+  const importedTypeId = 'imported-collections'
+  if (!types.some((type) => type.id === importedTypeId)) {
+    types.push({ id: importedTypeId, label: 'Imported collections', icon: '📦' })
+  }
+  for (const folderId of missingFolderIds) {
+    folders.push({
+      id: folderId,
+      name: `Imported folder ${folderId}`,
+      typeId: importedTypeId,
+      parentId: null,
+    })
+  }
+  return { types, folders, items }
 }
 
 const GDRIVE_BACKUP = process.env.GDRIVE_PATH ||
