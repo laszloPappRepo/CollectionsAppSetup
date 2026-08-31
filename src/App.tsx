@@ -99,7 +99,9 @@ const EMOJI_OPTIONS = [
 
 // ─── API sync ────────────────────────────────────────────────────────────────
 
-const API = "/api/data";
+const API_ORIGIN = import.meta.env.DEV ? "http://127.0.0.1:8444" : "";
+const API = `${API_ORIGIN}/api/data`;
+const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
 const LOCAL_STORAGE_KEY = "collections-app-data";
 
 type AppData = { types: CollectionType[]; folders: Folder[]; items: MediaItem[] };
@@ -137,13 +139,13 @@ async function loadFromServer(): Promise<AppData | null> {
 async function saveToServer(types: CollectionType[], folders: Folder[], items: MediaItem[], deletedIds: string[] = []) {
   try {
     const headers = { "Content-Type": "application/json" };
-    const metadataResponse = await fetch("/api/meta", { method: "POST", headers, body: JSON.stringify({ types, folders }) });
+    const metadataResponse = await fetch(apiUrl("/api/meta"), { method: "POST", headers, body: JSON.stringify({ types, folders }) });
     if (!metadataResponse.ok) throw new Error(`Metadata save failed: ${metadataResponse.status}`);
-    const itemResponses = await Promise.all(items.map((item) => fetch(`/api/items/${encodeURIComponent(item.id)}`, {
+    const itemResponses = await Promise.all(items.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
       method: "PUT", headers, body: JSON.stringify(item),
     })));
     if (itemResponses.some((response) => !response.ok)) throw new Error("Item save failed");
-    const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" })));
+    const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(apiUrl(`/api/items/${encodeURIComponent(id)}`), { method: "DELETE" })));
     if (deleteResponses.some((response) => !response.ok)) throw new Error("Item deletion failed");
     return true;
   }
@@ -1227,7 +1229,7 @@ export default function App() {
     setItems((prev) => prev.filter((i) => i.id !== id));
     // Delete immediately as well as through the debounced full-state sync.
     // This prevents a removed item from returning after a page reload.
-    fetch(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+    fetch(apiUrl(`/api/items/${encodeURIComponent(id)}`), { method: "DELETE" }).catch(() => {});
     setDeleteItemId(null); setModal(null);
   };
 

@@ -12,6 +12,19 @@ const ITEMS_DIR = path.join(STORAGE_DIR, 'items')
 
 app.use(express.json({ limit: '100mb' }))
 
+// The development UI runs on :8443 while this local-only data service runs
+// on :8444. Allow that browser origin without exposing the service remotely.
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  if (origin === 'http://localhost:8443' || origin === 'http://127.0.0.1:8443') {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+
 // Serve built frontend
 app.use(express.static(path.join(__dirname, 'dist')))
 
