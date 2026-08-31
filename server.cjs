@@ -3,7 +3,8 @@ const fs = require('fs')
 const path = require('path')
 
 const app = express()
-const PORT = process.env.PORT || 8443
+const PORT = process.env.API_PORT || process.env.PORT || 8443
+const HOST = process.env.HOST || '0.0.0.0'
 const DATA_FILE = path.join(__dirname, 'collections-data.json')
 const STORAGE_DIR = path.join(__dirname, 'collections-data')
 const META_FILE = path.join(STORAGE_DIR, 'metadata.json')
@@ -134,6 +135,6 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Collections running on http://0.0.0.0:${PORT}`)
+app.listen(PORT, HOST, () => {
+  console.log(`Collections running on http://${HOST}:${PORT}`)
 })
