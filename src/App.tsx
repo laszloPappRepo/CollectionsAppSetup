@@ -721,7 +721,7 @@ function FolderTree({
 }: {
   folders: Folder[]; items: MediaItem[]; typeId: string; parentId?: string | null; depth?: number;
   selectedFolderId: string | null; onSelectFolder: (id: string) => void;
-  onMoveFolder: (folderId: string, parentId: string | null) => void;
+  onMoveFolder: (folderId: string, parentId: string | null, typeId?: string) => void;
   onMoveItem: (itemId: string, folderId: string) => void;
   expandedFolderIds: Set<string>; onToggleFolder: (id: string) => void;
 }) {
@@ -953,7 +953,7 @@ function FolderCoverDropzone({ value, onChange }: { value: string; onChange: (v:
 function FolderCard({ folder, itemCount, subfolderCount, onClick, onRename, onDelete, onMoveFolder, onMoveItem }: {
   folder: Folder; itemCount: number; subfolderCount: number;
   onClick: () => void; onRename: () => void; onDelete: () => void;
-  onMoveFolder: (folderId: string, parentId: string | null) => void;
+  onMoveFolder: (folderId: string, parentId: string | null, typeId?: string) => void;
   onMoveItem: (itemId: string, folderId: string) => void;
 }) {
   const [hover, setHover] = useState(false);
@@ -1069,6 +1069,7 @@ export default function App() {
   const [newFolderCover, setNewFolderCover] = useState("");
   const [renameFolderName, setRenameFolderName] = useState("");
   const [renameFolderCover, setRenameFolderCover] = useState("");
+  const [renameFolderTypeId, setRenameFolderTypeId] = useState("");
   const [renameFolderParentId, setRenameFolderParentId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [search, setSearch] = useState("");
@@ -1137,15 +1138,23 @@ export default function App() {
     setItems((prev) => prev.map((item) => item.id === itemId ? { ...item, folderId } : item));
   };
 
-  const moveFolder = (folderId: string, parentId: string | null) => {
+  const moveFolder = (folderId: string, parentId: string | null, targetTypeId?: string) => {
     const source = folders.find((folder) => folder.id === folderId);
     if (!source) return;
+    const destinationTypeId = targetTypeId ?? (parentId ? folders.find((folder) => folder.id === parentId)?.typeId : source.typeId);
+    if (!destinationTypeId) return;
     if (parentId) {
       const target = folders.find((folder) => folder.id === parentId);
       const descendants = getAllDescendantFolderIds(source.id, folders);
-      if (!target || source.typeId !== target.typeId || source.id === target.id || descendants.includes(target.id)) return;
+      if (!target || destinationTypeId !== target.typeId || source.id === target.id || descendants.includes(target.id)) return;
     }
-    setFolders((prev) => prev.map((folder) => folder.id === source.id ? { ...folder, parentId } : folder));
+    const movedIds = new Set([source.id, ...getAllDescendantFolderIds(source.id, folders)]);
+    setFolders((prev) => prev.map((folder) => movedIds.has(folder.id)
+      ? { ...folder, parentId: folder.id === source.id ? parentId : folder.parentId, typeId: destinationTypeId }
+      : folder));
+    setExpandedFolderIds((current) => new Set([...current, ...movedIds, ...(parentId ? [parentId] : [])]));
+    setSelectedTypeId(destinationTypeId);
+    setSelectedFolderId(source.id);
   };
 
   const addFolder = () => {
@@ -1163,9 +1172,17 @@ export default function App() {
     if (!targetFolder || !renameFolderName.trim()) return;
     const blockedIds = getAllDescendantFolderIds(targetFolder.id, folders);
     if (renameFolderParentId === targetFolder.id || blockedIds.includes(renameFolderParentId ?? "")) return;
-    setFolders((prev) => prev.map((f) => f.id === targetFolder.id
-      ? { ...f, name: renameFolderName.trim(), cover: renameFolderCover || undefined, parentId: renameFolderParentId }
+    const destination = renameFolderParentId ? folders.find((folder) => folder.id === renameFolderParentId) : null;
+    if (!types.some((type) => type.id === renameFolderTypeId) || (destination && destination.typeId !== renameFolderTypeId)) return;
+    const movedIds = new Set([targetFolder.id, ...blockedIds]);
+    setFolders((prev) => prev.map((f) => movedIds.has(f.id)
+      ? { ...f, name: f.id === targetFolder.id ? renameFolderName.trim() : f.name, cover: f.id === targetFolder.id ? (renameFolderCover || undefined) : f.cover, parentId: f.id === targetFolder.id ? renameFolderParentId : f.parentId, typeId: renameFolderTypeId }
       : f));
+    if (renameFolderParentId) {
+      setExpandedFolderIds((current) => new Set([...current, renameFolderParentId]));
+    }
+    setSelectedTypeId(renameFolderTypeId);
+    setSelectedFolderId(targetFolder.id);
     setModal(null);
     setTargetFolder(null);
   };
@@ -1290,7 +1307,7 @@ export default function App() {
                   onDrop={(e) => {
                     e.preventDefault();
                     const folderId = e.dataTransfer.getData("application/x-collection-folder");
-                    if (folderId && folders.some((folder) => folder.id === folderId && folder.typeId === type.id)) moveFolder(folderId, null);
+                    if (folderId) moveFolder(folderId, null, type.id);
                   }}
                   className="w-full flex items-center justify-between px-3 py-2 rounded text-sm transition-colors text-left"
                   style={{ background: isActive && !selectedFolderId ? "#1e1c24" : "transparent", color: isActive ? "#e8e6e1" : "#6b6870" }}
@@ -1388,7 +1405,7 @@ export default function App() {
                         <FolderCard key={folder.id} folder={folder} itemCount={itemCount} subfolderCount={subfolderCount}
                           onClick={() => selectFolder(folder.id)}
                           onMoveFolder={moveFolder} onMoveItem={moveItem}
-                          onRename={() => { setTargetFolder(folder); setRenameFolderName(folder.name); setRenameFolderCover(folder.cover ?? ""); setRenameFolderParentId(folder.parentId); setModal("renameFolder"); }}
+                          onRename={() => { setTargetFolder(folder); setRenameFolderName(folder.name); setRenameFolderCover(folder.cover ?? ""); setRenameFolderTypeId(folder.typeId); setRenameFolderParentId(folder.parentId); setModal("renameFolder"); }}
                           onDelete={() => { setTargetFolder(folder); setModal("deleteFolder"); }} />
                       );
                     })}
@@ -1480,13 +1497,21 @@ export default function App() {
                 onKeyDown={(e) => e.key === "Enter" && renameFolder()} />
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "#a8a5a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Move to Collection</label>
+              <select className="w-full rounded px-3 py-2 text-sm outline-none" style={inputStyle}
+                value={renameFolderTypeId}
+                onChange={(e) => { setRenameFolderTypeId(e.target.value); setRenameFolderParentId(null); }}>
+                {types.map((type) => <option key={type.id} value={type.id}>{type.icon} {type.label}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-xs" style={{ color: "#a8a5a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Move to Folder</label>
               <select className="w-full rounded px-3 py-2 text-sm outline-none" style={inputStyle}
                 value={renameFolderParentId ?? ""}
                 onChange={(e) => setRenameFolderParentId(e.target.value || null)}>
                 <option value="">Library root</option>
                 {folders
-                  .filter((folder) => folder.typeId === targetFolder.typeId && folder.id !== targetFolder.id && !getAllDescendantFolderIds(targetFolder.id, folders).includes(folder.id))
+                  .filter((folder) => folder.typeId === renameFolderTypeId && folder.id !== targetFolder.id && !getAllDescendantFolderIds(targetFolder.id, folders).includes(folder.id))
                   .map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
               </select>
             </div>
