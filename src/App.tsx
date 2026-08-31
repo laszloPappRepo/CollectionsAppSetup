@@ -741,7 +741,9 @@ function FolderTree({
 
         return (
           <div key={folder.id}>
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectFolder(folder.id)}
               aria-expanded={hasChildren ? isExpanded : undefined}
               draggable
@@ -774,13 +776,16 @@ function FolderTree({
               }}
             >
               <span
+                role="button"
+                tabIndex={hasChildren ? 0 : -1}
                 className="text-xs opacity-50 w-3 text-center"
                 onClick={(e) => { e.stopPropagation(); if (hasChildren) onToggleFolder(folder.id); }}
+                onKeyDown={(e) => { if (hasChildren && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onToggleFolder(folder.id); } }}
                 title={hasChildren ? (isExpanded ? "Collapse folder" : "Expand folder") : undefined}
               >{hasChildren ? (isExpanded ? "▾" : "▸") : "·"}</span>
               <span className="flex-1 leading-snug">{folder.name}</span>
               <span className="text-xs shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: "#3a3848" }}>{subCount}</span>
-            </button>
+            </div>
             {isExpanded ? (
               <FolderTree folders={folders} items={items} typeId={typeId} parentId={folder.id}
                 depth={depth + 1} selectedFolderId={selectedFolderId} onSelectFolder={onSelectFolder}
@@ -847,6 +852,9 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
             <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
               className="w-7 h-7 rounded flex items-center justify-center text-xs"
               style={{ background: "#0d0d10cc", color: "#d4a843", border: "1px solid #2a2830" }}>✎</button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="w-7 h-7 rounded flex items-center justify-center text-xs"
+              style={{ background: "#0d0d10cc", color: "#f87171", border: "1px solid #2a2830" }}>✕</button>
           </div>
         )}
       </div>
@@ -1061,6 +1069,7 @@ export default function App() {
   const [newFolderCover, setNewFolderCover] = useState("");
   const [renameFolderName, setRenameFolderName] = useState("");
   const [renameFolderCover, setRenameFolderCover] = useState("");
+  const [renameFolderParentId, setRenameFolderParentId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [search, setSearch] = useState("");
 
@@ -1152,7 +1161,11 @@ export default function App() {
 
   const renameFolder = () => {
     if (!targetFolder || !renameFolderName.trim()) return;
-    setFolders((prev) => prev.map((f) => f.id === targetFolder.id ? { ...f, name: renameFolderName.trim(), cover: renameFolderCover || undefined } : f));
+    const blockedIds = getAllDescendantFolderIds(targetFolder.id, folders);
+    if (renameFolderParentId === targetFolder.id || blockedIds.includes(renameFolderParentId ?? "")) return;
+    setFolders((prev) => prev.map((f) => f.id === targetFolder.id
+      ? { ...f, name: renameFolderName.trim(), cover: renameFolderCover || undefined, parentId: renameFolderParentId }
+      : f));
     setModal(null);
     setTargetFolder(null);
   };
@@ -1375,7 +1388,7 @@ export default function App() {
                         <FolderCard key={folder.id} folder={folder} itemCount={itemCount} subfolderCount={subfolderCount}
                           onClick={() => selectFolder(folder.id)}
                           onMoveFolder={moveFolder} onMoveItem={moveItem}
-                          onRename={() => { setTargetFolder(folder); setRenameFolderName(folder.name); setRenameFolderCover(folder.cover ?? ""); setModal("renameFolder"); }}
+                          onRename={() => { setTargetFolder(folder); setRenameFolderName(folder.name); setRenameFolderCover(folder.cover ?? ""); setRenameFolderParentId(folder.parentId); setModal("renameFolder"); }}
                           onDelete={() => { setTargetFolder(folder); setModal("deleteFolder"); }} />
                       );
                     })}
@@ -1465,6 +1478,17 @@ export default function App() {
               <input autoFocus className="w-full rounded px-3 py-2 text-sm outline-none" style={inputStyle}
                 value={renameFolderName} onChange={(e) => setRenameFolderName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && renameFolder()} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "#a8a5a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Move to Folder</label>
+              <select className="w-full rounded px-3 py-2 text-sm outline-none" style={inputStyle}
+                value={renameFolderParentId ?? ""}
+                onChange={(e) => setRenameFolderParentId(e.target.value || null)}>
+                <option value="">Library root</option>
+                {folders
+                  .filter((folder) => folder.typeId === targetFolder.typeId && folder.id !== targetFolder.id && !getAllDescendantFolderIds(targetFolder.id, folders).includes(folder.id))
+                  .map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+              </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs" style={{ color: "#a8a5a0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Cover Image</label>
