@@ -737,10 +737,12 @@ function FolderTree({
   return (
     <>
       {children.map((folder) => {
-        const subCount = items.filter((i) => {
+        const folderItemIds = items.filter((i) => {
           const allIds = [folder.id, ...getAllDescendantFolderIds(folder.id, folders)];
           return allIds.includes(i.folderId);
-        }).length;
+        });
+        const ownedCount = folderItemIds.filter((item) => item.status === "owned").length;
+        const neededCount = folderItemIds.filter((item) => item.status === "needed").length;
         const hasChildren = folders.some((f) => f.parentId === folder.id);
         const isExpanded = expandedFolderIds.has(folder.id);
         const isSelected = selectedFolderId === folder.id;
@@ -789,8 +791,12 @@ function FolderTree({
                 onKeyDown={(e) => { if (hasChildren && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onToggleFolder(folder.id); } }}
                 title={hasChildren ? (isExpanded ? "Collapse folder" : "Expand folder") : undefined}
               >{hasChildren ? (isExpanded ? "▾" : "▸") : "·"}</span>
-              <span className="flex-1 leading-snug">{folder.name}</span>
-              <span className="text-xs shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: "#3a3848" }}>{subCount}</span>
+              <span className="min-w-0 flex-1 truncate leading-snug">{folder.name}</span>
+              <span className="ml-auto flex w-10 shrink-0 items-center justify-end gap-0 text-right text-xs" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                <span style={{ color: "#4ade80" }}>{ownedCount}</span>
+                <span style={{ color: "#6b6870" }}>/</span>
+                <span style={{ color: "#f87171" }}>{neededCount}</span>
+              </span>
             </div>
             {isExpanded ? (
               <FolderTree folders={folders} items={items} typeId={typeId} parentId={folder.id}
@@ -1306,7 +1312,7 @@ export default function App() {
       {/* ── Sidebar ── */}
       <aside
         className={`flex flex-col shrink-0 h-full overflow-y-auto fixed md:relative z-30 md:z-auto transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
-        style={{ width: 240, background: "#0d0d10", borderRight: "1px solid #2a2830" }}>
+        style={{ width: 264, background: "#0d0d10", borderRight: "1px solid #2a2830" }}>
         <div className="px-5 py-6 flex items-start justify-between">
           <div>
             <h1 style={{ fontFamily: "DM Serif Display, serif", fontSize: "1.4rem", color: "#e8e6e1" }}>Collections</h1>
@@ -1326,6 +1332,9 @@ export default function App() {
           {types.map((type) => {
             const isExpanded = expandedTypes.has(type.id);
             const isActive = selectedTypeId === type.id;
+            const typeFolderIds = new Set(folders.filter((folder) => folder.typeId === type.id).map((folder) => folder.id));
+            const ownedCount = items.filter((item) => typeFolderIds.has(item.folderId) && item.status === "owned").length;
+            const neededCount = items.filter((item) => typeFolderIds.has(item.folderId) && item.status === "needed").length;
             return (
               <div key={type.id}>
                 <button
@@ -1344,10 +1353,15 @@ export default function App() {
                   className="w-full flex items-center justify-between px-3 py-2 rounded text-sm transition-colors text-left"
                   style={{ background: isActive && !selectedFolderId ? "#1e1c24" : "transparent", color: isActive ? "#e8e6e1" : "#6b6870" }}
                 >
-                  <span className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 flex items-center gap-2 truncate">
                     <span className="text-xs transition-transform" style={{ display: "inline-block", transform: isExpanded ? "rotate(90deg)" : "none" }}>▸</span>
                     <span>{type.icon}</span>
-                    <span>{type.label}</span>
+                    <span className="truncate">{type.label}</span>
+                  </span>
+                  <span className="ml-auto flex w-10 shrink-0 items-center justify-end gap-0 text-right text-xs" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                    <span style={{ color: "#4ade80" }}>{ownedCount}</span>
+                    <span style={{ color: "#6b6870" }}>/</span>
+                    <span style={{ color: "#f87171" }}>{neededCount}</span>
                   </span>
                 </button>
                 {isExpanded && (
