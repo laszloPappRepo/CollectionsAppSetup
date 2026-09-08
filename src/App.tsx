@@ -1051,20 +1051,44 @@ export default function App() {
 
   // sync to server whenever data changes (skip first render before load)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A save can take longer than the 800ms debounce (many items = many PUT
+  // requests), so a further edit could start a second save while the first
+  // is still in flight. Since each save PUTs a full snapshot of every item,
+  // running two at once is a race: whichever request lands last on the
+  // server wins, so an older in-flight save can overwrite a newer edit with
+  // stale data. Serialize saves instead — queue the latest snapshot and run
+  // it right after the current save finishes, never in parallel with it.
+  const savingRef = useRef(false);
+  const pendingSaveRef = useRef<{ types: CollectionType[]; folders: Folder[]; items: MediaItem[] } | null>(null);
+  const runSave = useCallback((t: CollectionType[], f: Folder[], i: MediaItem[]) => {
+    if (savingRef.current) {
+      pendingSaveRef.current = { types: t, folders: f, items: i };
+      return;
+    }
+    savingRef.current = true;
+    const currentIds = new Set(i.map((item) => item.id));
+    const deletedIds = serverItemIds.current
+      ? [...serverItemIds.current].filter((id) => !currentIds.has(id))
+      : [];
+    saveToServer(t, f, i, deletedIds).then((saved) => {
+      if (saved) serverItemIds.current = currentIds;
+    }).finally(() => {
+      savingRef.current = false;
+      const pending = pendingSaveRef.current;
+      if (pending) {
+        pendingSaveRef.current = null;
+        runSave(pending.types, pending.folders, pending.items);
+      }
+    });
+  }, []);
   useEffect(() => {
     if (!loaded) return;
     saveToLocalStorage({ types, folders, items });
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      const currentIds = new Set(items.map((item) => item.id));
-      const deletedIds = serverItemIds.current
-        ? [...serverItemIds.current].filter((id) => !currentIds.has(id))
-        : [];
-      saveToServer(types, folders, items, deletedIds).then((saved) => {
-        if (saved) serverItemIds.current = currentIds;
-      });
+      runSave(types, folders, items);
     }, 800);
-  }, [types, folders, items, loaded]);
+  }, [types, folders, items, loaded, runSave]);
 
   // navigation
   const [sidebarOpen, setSidebarOpen] = useState(false);
