@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import * as XLSX from "xlsx";
 
 type Status = "owned" | "needed";
 
@@ -1085,6 +1086,7 @@ export default function App() {
   const [renameFolderParentId, setRenameFolderParentId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [search, setSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
 
 
   const typeMap = useMemo(() => Object.fromEntries(types.map((t) => [t.id, t])), [types]);
@@ -1261,6 +1263,32 @@ export default function App() {
     setModal(null); setEditingItem(null);
   };
 
+  // Covers are stripped from the initial summary load and only backfilled in the
+  // background once a folder is opened. If the edit modal is opened before that
+  // backfill finishes, the form would start from an empty cover and silently
+  // wipe out the real one on save. Make sure the full item (with its cover) is
+  // loaded before the form is shown.
+  const openEditItem = async (item: MediaItem) => {
+    if (!item.cover) {
+      try {
+        const response = await fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`));
+        if (response.ok) {
+          const fullItem = await response.json();
+          if (fullItem?.cover) {
+            item = { ...item, cover: fullItem.cover };
+            setItems((current) => current.map((candidate) => candidate.id === item.id
+              ? { ...candidate, cover: fullItem.cover }
+              : candidate));
+          }
+        }
+      } catch {
+        // offline — fall back to whatever cover is already in state
+      }
+    }
+    setEditingItem(item);
+    setModal("editItem");
+  };
+
   const deleteItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
     // Delete immediately as well as through the debounced full-state sync.
@@ -1278,6 +1306,67 @@ export default function App() {
       return folder && !removedIds.includes(folder.typeId);
     }));
     setTypes(newTypes);
+  };
+
+  // Builds the full "Type / Parent / Folder" path for a given folder id, used
+  // to make the exported spreadsheet readable without the raw folder ids.
+  const folderPath = (folderId: string): string => {
+    const parts: string[] = [];
+    let cur = folders.find((f) => f.id === folderId);
+    while (cur) {
+      parts.unshift(cur.name);
+      cur = cur.parentId ? folders.find((f) => f.id === cur!.parentId) : undefined;
+    }
+    return parts.join(" / ");
+  };
+
+  // Exports the whole collection (every type, folder and item) to an .xlsx
+  // file. The in-memory item list may still be missing covers for folders
+  // that were never opened, so the full data — including covers — is fetched
+  // from the server first and only falls back to the current state if that's
+  // not available (e.g. offline).
+  const exportToXlsx = async () => {
+    setExporting(true);
+    try {
+      let exportItems = items;
+      try {
+        const response = await fetch(API);
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data.items)) exportItems = data.items;
+        }
+      } catch {
+        // offline — export whatever is currently loaded in memory
+      }
+
+      const rows = exportItems.map((item) => {
+        const folder = folders.find((f) => f.id === item.folderId);
+        const type = folder ? typeMap[folder.typeId] : undefined;
+        return {
+          Type: type?.label ?? "",
+          Folder: folder ? folderPath(folder.id) : "",
+          Title: item.title,
+          Status: STATUS_LABELS[item.status],
+          Rating: item.rating ?? "",
+          Year: item.year,
+          Genre: item.genre,
+          Notes: item.notes,
+          "Added At": item.addedAt,
+          Cover: item.cover ? (item.cover.startsWith("data:") ? "Embedded image (not exported)" : item.cover) : "",
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      worksheet["!cols"] = [
+        { wch: 14 }, { wch: 24 }, { wch: 30 }, { wch: 10 }, { wch: 8 },
+        { wch: 8 }, { wch: 16 }, { wch: 40 }, { wch: 12 }, { wch: 40 },
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Collection");
+      XLSX.writeFile(workbook, `collections-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const editForm: ItemFormData = editingItem
@@ -1375,7 +1464,12 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-4 mt-auto" style={{ borderTop: "1px solid #2a2830" }}>
+        <div className="p-4 mt-auto flex flex-col gap-3" style={{ borderTop: "1px solid #2a2830" }}>
+          <button onClick={exportToXlsx} disabled={exporting}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: "#1e1c24", color: "#d4a843", border: "1px solid #2a2830", cursor: exporting ? "default" : "pointer" }}>
+            <span>⬇</span><span>{exporting ? "Exporting…" : "Export to Excel"}</span>
+          </button>
           <p className="text-xs" style={{ color: "#3a3848", fontFamily: "JetBrains Mono, monospace" }}>v1.0 · Personal Server</p>
         </div>
       </aside>
@@ -1476,7 +1570,7 @@ export default function App() {
                     <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))" }}>
                       {visibleItems.map((item) => (
                         <MediaCard key={item.id} item={item}
-                          onEdit={() => { setEditingItem(item); setModal("editItem"); }}
+                          onEdit={() => { void openEditItem(item); }}
                           onDelete={() => { setDeleteItemId(item.id); setModal("deleteItem"); }} />
                       ))}
                     </div>
