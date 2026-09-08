@@ -141,12 +141,22 @@ async function loadFromServer(): Promise<AppData | null> {
   } catch { return null; }
 }
 
-async function saveToServer(types: CollectionType[], folders: Folder[], items: MediaItem[], deletedIds: string[] = []) {
+// `changedItems` should only contain items that actually changed since the
+// last successful save (see the diffing in `runSave` below). With large
+// collections (thousands of items), resending every item — and the whole
+// metadata blob, which embeds large base64 folder covers — on every save
+// means firing thousands of simultaneous requests, which can silently fail
+// under the browser's per-origin connection limits and lose whichever edit
+// happened to be among the dropped requests. Only syncing what changed keeps
+// each save small and reliable regardless of collection size.
+async function saveToServer(types: CollectionType[], folders: Folder[], changedItems: MediaItem[], deletedIds: string[] = [], syncMeta = true) {
   try {
     const headers = { "Content-Type": "application/json" };
-    const metadataResponse = await fetch(apiUrl("/api/meta"), { method: "POST", headers, body: JSON.stringify({ types, folders }) });
-    if (!metadataResponse.ok) throw new Error(`Metadata save failed: ${metadataResponse.status}`);
-    const itemResponses = await Promise.all(items.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
+    if (syncMeta) {
+      const metadataResponse = await fetch(apiUrl("/api/meta"), { method: "POST", headers, body: JSON.stringify({ types, folders }) });
+      if (!metadataResponse.ok) throw new Error(`Metadata save failed: ${metadataResponse.status}`);
+    }
+    const itemResponses = await Promise.all(changedItems.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
       method: "PUT", headers, body: JSON.stringify(item),
     })));
     if (itemResponses.some((response) => !response.ok)) throw new Error("Item save failed");
@@ -1033,7 +1043,11 @@ export default function App() {
   const [folders, setFolders] = useState<Folder[]>(INITIAL_FOLDERS);
   const [items, setItems] = useState<MediaItem[]>(INITIAL_ITEMS);
   const [loaded, setLoaded] = useState(false);
-  const serverItemIds = useRef<Set<string> | null>(null);
+  // Snapshot of what the server currently holds, keyed by item id. Used to
+  // diff against the latest state so a save only sends items that actually
+  // changed (see `runSave`) instead of resending the entire collection.
+  const lastSyncedItemsRef = useRef<Map<string, MediaItem> | null>(null);
+  const lastSyncedMetaRef = useRef<{ types: CollectionType[]; folders: Folder[] } | null>(null);
 
   // load from server on mount
   useEffect(() => {
@@ -1043,7 +1057,10 @@ export default function App() {
         setTypes(savedData.types);
         setFolders(savedData.folders);
         setItems(savedData.items);
-        if (data) serverItemIds.current = new Set(data.items.map((item) => item.id));
+        if (data) {
+          lastSyncedItemsRef.current = new Map(data.items.map((item) => [item.id, item]));
+          lastSyncedMetaRef.current = { types: data.types, folders: data.folders };
+        }
       }
       setLoaded(true);
     });
@@ -1066,12 +1083,23 @@ export default function App() {
       return;
     }
     savingRef.current = true;
+    const lastItems = lastSyncedItemsRef.current;
+    const lastMeta = lastSyncedMetaRef.current;
+    // Editing a single item only replaces that item's entry in `items`
+    // (`.map`), so every other item keeps the exact same object reference —
+    // a reference check is therefore enough to tell which items actually
+    // changed, without a deep comparison over thousands of items.
+    const changedItems = lastItems ? i.filter((item) => lastItems.get(item.id) !== item) : i;
+    const syncMeta = !lastMeta || lastMeta.types !== t || lastMeta.folders !== f;
     const currentIds = new Set(i.map((item) => item.id));
-    const deletedIds = serverItemIds.current
-      ? [...serverItemIds.current].filter((id) => !currentIds.has(id))
+    const deletedIds = lastItems
+      ? [...lastItems.keys()].filter((id) => !currentIds.has(id))
       : [];
-    saveToServer(t, f, i, deletedIds).then((saved) => {
-      if (saved) serverItemIds.current = currentIds;
+    saveToServer(t, f, changedItems, deletedIds, syncMeta).then((saved) => {
+      if (saved) {
+        lastSyncedItemsRef.current = new Map(i.map((item) => [item.id, item]));
+        lastSyncedMetaRef.current = { types: t, folders: f };
+      }
     }).finally(() => {
       savingRef.current = false;
       const pending = pendingSaveRef.current;
