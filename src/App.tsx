@@ -145,10 +145,14 @@ async function loadFromServer(): Promise<AppData | null> {
 // last successful save (see the diffing in `runSave` below). With large
 // collections (thousands of items), resending every item — and the whole
 // metadata blob, which embeds large base64 folder covers — on every save
-// means firing thousands of simultaneous requests, which can silently fail
-// under the browser's per-origin connection limits and lose whichever edit
-// happened to be among the dropped requests. Only syncing what changed keeps
-// each save small and reliable regardless of collection size.
+// means firing thousands of simultaneous requests. The browser's per-origin
+// connection limit (~6 for Chrome/Firefox) silently drops excess requests.
+// That is why initial-seed entries (the ~93 Pókember comics) keep resetting:
+// their simultaneous PUT requests exceed the limit and many never arrive on
+// the server. We throttle saves so at most N fire simultaneously and the
+// browser can queue the rest without dropping them.
+const MAX_CONCURRENT_SAVES = 5;
+
 async function saveToServer(types: CollectionType[], folders: Folder[], changedItems: MediaItem[], deletedIds: string[] = [], syncMeta = true) {
   try {
     const headers = { "Content-Type": "application/json" };
@@ -156,12 +160,20 @@ async function saveToServer(types: CollectionType[], folders: Folder[], changedI
       const metadataResponse = await fetch(apiUrl("/api/meta"), { method: "POST", headers, body: JSON.stringify({ types, folders }) });
       if (!metadataResponse.ok) throw new Error(`Metadata save failed: ${metadataResponse.status}`);
     }
-    const itemResponses = await Promise.all(changedItems.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
-      method: "PUT", headers, body: JSON.stringify(item),
-    })));
-    if (itemResponses.some((response) => !response.ok)) throw new Error("Item save failed");
-    const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(apiUrl(`/api/items/${encodeURIComponent(id)}`), { method: "DELETE" })));
-    if (deleteResponses.some((response) => !response.ok)) throw new Error("Item deletion failed");
+    // Throttle item saves to MAX_CONCURRENT_SAVES at a time so the browser
+    // doesn't silently drop excess requests. With 93 seed items this prevents
+    // the ~100 reset bug where initial entries never reach the server.
+    for (let i = 0; i < changedItems.length; i += MAX_CONCURRENT_SAVES) {
+      const batch = changedItems.slice(i, i + MAX_CONCURRENT_SAVES);
+      const responses = await Promise.all(batch.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
+        method: "PUT", headers, body: JSON.stringify(item),
+      })));
+      if (responses.some((response) => !response.ok)) throw new Error("Item save failed");
+    }
+    if (deletedIds.length > 0) {
+      const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(apiUrl(`/api/items/${encodeURIComponent(id)}`), { method: "DELETE" })));
+      if (deleteResponses.some((response) => !response.ok)) throw new Error("Item deletion failed");
+    }
     return true;
   }
   catch { /* offline — data remains in the current app state */ return false; }
