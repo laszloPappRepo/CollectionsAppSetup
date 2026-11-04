@@ -858,6 +858,71 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
   );
 }
 
+// ─── breadcrumb navigation ──────────────────────────────────────────────────
+
+function Breadcrumb({ path, currentFolder, typeLabel, onSelect }: {
+  path: Folder[];
+  currentFolder: Folder | null;
+  typeLabel: string;
+  onSelect: (folderId: string) => void;
+}) {
+  return (
+    <nav className="flex items-center gap-0.5 text-xs flex-wrap" aria-label="Breadcrumb">
+      {/* Library root */}
+      <button
+        onClick={() => onSelect("")}
+        className="px-1.5 py-0.5 rounded transition-colors"
+        style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}
+        title="Library root"
+      >📚</button>
+
+      {/* Type segment */}
+      {typeLabel && (
+        <>
+          <span className="text-[10px] mx-0.5" style={{ color: "#2a2830" }}>›</span>
+          <button
+            onClick={() => onSelect("__type__")}
+            className="px-1.5 py-0.5 rounded transition-colors hover:bg-white/5"
+            style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}
+            title="Back to type"
+          >{typeLabel}</button>
+        </>
+      )}
+
+      {/* Folder path segments */}
+      {path.map((folder, index) => (
+        <span key={folder.id} className="flex items-center">
+          <span className="text-[10px] mx-0.5" style={{ color: "#2a2830" }}>›</span>
+          <button
+            onClick={() => onSelect(folder.id)}
+            className="px-1.5 py-0.5 rounded transition-colors hover:bg-white/5"
+            style={{
+              color: index === path.length - 1 ? "#d4a843" : "#6b6870",
+              fontFamily: "JetBrains Mono, monospace",
+              fontWeight: index === path.length - 1 ? 600 : 400,
+            }}
+          >{folder.name}</button>
+        </span>
+      ))}
+
+      {/* Current folder (only when it's not already the last segment in path) */}
+      {currentFolder && (() => {
+        const lastItemInPath = path[path.length - 1];
+        return !lastItemInPath || lastItemInPath.id !== currentFolder.id;
+      })() && (
+        <>
+          <span className="text-[10px] mx-0.5" style={{ color: "#2a2830" }}>›</span>
+          <button
+            onClick={() => onSelect(currentFolder.id)}
+            className="px-1.5 py-0.5 rounded transition-colors hover:bg-white/5"
+            style={{ color: "#e8e6e1", fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}
+          >{currentFolder.name}</button>
+        </>
+      )}
+    </nav>
+  );
+}
+
 // ─── media card ─────────────────────────────────────────────────────────────
 
 function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => void; onDelete: () => void }) {
@@ -1594,6 +1659,26 @@ export default function App() {
                   {currentFolder.name}
                 </h2>
               )}
+
+              {/* Breadcrumb */}
+              {(selectedTypeId || selectedFolderId) && (
+                <Breadcrumb
+                  path={breadcrumb}
+                  currentFolder={currentFolder}
+                  typeLabel={currentType ? `${currentType.icon} ${currentType.label}` : ""}
+                  onSelect={(id) => {
+                    if (id === "__type__") {
+                      setSelectedFolderId(null);
+                    } else if (id === "") {
+                      setSelectedTypeId(null);
+                      setSelectedFolderId(null);
+                    } else {
+                      selectFolder(id);
+                    }
+                  }}
+                />
+              )}
+
               {/* Subfolders */}
               {visibleSubfolders.length > 0 && (
                 <div>
