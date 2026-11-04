@@ -24,6 +24,7 @@ interface MediaItem {
   status: Status;
   rating: number | null;
   year: number;
+  month: number | null;
   genre: string;
   cover: string;
   notes: string;
@@ -145,10 +146,14 @@ async function loadFromServer(): Promise<AppData | null> {
 // last successful save (see the diffing in `runSave` below). With large
 // collections (thousands of items), resending every item — and the whole
 // metadata blob, which embeds large base64 folder covers — on every save
-// means firing thousands of simultaneous requests, which can silently fail
-// under the browser's per-origin connection limits and lose whichever edit
-// happened to be among the dropped requests. Only syncing what changed keeps
-// each save small and reliable regardless of collection size.
+// means firing thousands of simultaneous requests. The browser's per-origin
+// connection limit (~6 for Chrome/Firefox) silently drops excess requests.
+// That is why initial-seed entries (the ~93 Pókember comics) keep resetting:
+// their simultaneous PUT requests exceed the limit and many never arrive on
+// the server. We throttle saves so at most N fire simultaneously and the
+// browser can queue the rest without dropping them.
+const MAX_CONCURRENT_SAVES = 5;
+
 async function saveToServer(types: CollectionType[], folders: Folder[], changedItems: MediaItem[], deletedIds: string[] = [], syncMeta = true) {
   try {
     const headers = { "Content-Type": "application/json" };
@@ -156,12 +161,20 @@ async function saveToServer(types: CollectionType[], folders: Folder[], changedI
       const metadataResponse = await fetch(apiUrl("/api/meta"), { method: "POST", headers, body: JSON.stringify({ types, folders }) });
       if (!metadataResponse.ok) throw new Error(`Metadata save failed: ${metadataResponse.status}`);
     }
-    const itemResponses = await Promise.all(changedItems.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
-      method: "PUT", headers, body: JSON.stringify(item),
-    })));
-    if (itemResponses.some((response) => !response.ok)) throw new Error("Item save failed");
-    const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(apiUrl(`/api/items/${encodeURIComponent(id)}`), { method: "DELETE" })));
-    if (deleteResponses.some((response) => !response.ok)) throw new Error("Item deletion failed");
+    // Throttle item saves to MAX_CONCURRENT_SAVES at a time so the browser
+    // doesn't silently drop excess requests. With 93 seed items this prevents
+    // the ~100 reset bug where initial entries never reach the server.
+    for (let i = 0; i < changedItems.length; i += MAX_CONCURRENT_SAVES) {
+      const batch = changedItems.slice(i, i + MAX_CONCURRENT_SAVES);
+      const responses = await Promise.all(batch.map((item) => fetch(apiUrl(`/api/items/${encodeURIComponent(item.id)}`), {
+        method: "PUT", headers, body: JSON.stringify(item),
+      })));
+      if (responses.some((response) => !response.ok)) throw new Error("Item save failed");
+    }
+    if (deletedIds.length > 0) {
+      const deleteResponses = await Promise.all(deletedIds.map((id) => fetch(apiUrl(`/api/items/${encodeURIComponent(id)}`), { method: "DELETE" })));
+      if (deleteResponses.some((response) => !response.ok)) throw new Error("Item deletion failed");
+    }
     return true;
   }
   catch { /* offline — data remains in the current app state */ return false; }
@@ -549,7 +562,7 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
 
 // ─── item form ───────────────────────────────────────────────────────────────
 
-type ItemFormData = { title: string; status: Status; rating: string; year: string; genre: string; cover: string; notes: string; folderId: string };
+type ItemFormData = { title: string; status: Status; rating: string; year: string; month: string; genre: string; cover: string; notes: string; folderId: string };
 
 function ItemForm({ initial, onSave, onCancel, folders, typeId }: {
   initial: ItemFormData; onSave: (d: ItemFormData) => void; onCancel: () => void;
@@ -579,6 +592,15 @@ function ItemForm({ initial, onSave, onCancel, folders, typeId }: {
         <div className="flex flex-col gap-1">
           <label style={labelStyle}>Year</label>
           <input className={inputClass} style={inputStyle} type="number" value={form.year} onChange={(e) => set("year", e.target.value)} min="1800" max="2030" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label style={labelStyle}>Month</label>
+          <select className={inputClass} style={inputStyle} value={form.month} onChange={(e) => set("month", e.target.value)}>
+            <option value="">None</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString("en", { month: "long" })}</option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-col gap-1">
           <label style={labelStyle}>Genre</label>
@@ -612,7 +634,7 @@ function ItemForm({ initial, onSave, onCancel, folders, typeId }: {
   );
 }
 
-const BLANK_ITEM: ItemFormData = { title: "", status: "owned", rating: "", year: new Date().getFullYear().toString(), genre: "", cover: "", notes: "", folderId: "" };
+const BLANK_ITEM: ItemFormData = { title: "", status: "owned", rating: "", year: new Date().getFullYear().toString(), month: "", genre: "", cover: "", notes: "", folderId: "" };
 
 // ─── manage types modal ──────────────────────────────────────────────────────
 
@@ -846,6 +868,71 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
   );
 }
 
+// ─── breadcrumb navigation ──────────────────────────────────────────────────
+
+function Breadcrumb({ path, currentFolder, typeLabel, onSelect }: {
+  path: Folder[];
+  currentFolder: Folder | null;
+  typeLabel: string;
+  onSelect: (folderId: string) => void;
+}) {
+  return (
+    <nav className="flex items-center gap-0.5 text-xs flex-wrap" aria-label="Breadcrumb">
+      {/* Library root */}
+      <button
+        onClick={() => onSelect("")}
+        className="px-1.5 py-0.5 rounded transition-colors"
+        style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}
+        title="Library root"
+      >📚</button>
+
+      {/* Type segment */}
+      {typeLabel && (
+        <>
+          <span className="text-[10px] mx-0.5" style={{ color: "#2a2830" }}>›</span>
+          <button
+            onClick={() => onSelect("__type__")}
+            className="px-1.5 py-0.5 rounded transition-colors hover:bg-white/5"
+            style={{ color: "#6b6870", fontFamily: "JetBrains Mono, monospace" }}
+            title="Back to type"
+          >{typeLabel}</button>
+        </>
+      )}
+
+      {/* Folder path segments */}
+      {path.map((folder, index) => (
+        <span key={folder.id} className="flex items-center">
+          <span className="text-[10px] mx-0.5" style={{ color: "#2a2830" }}>›</span>
+          <button
+            onClick={() => onSelect(folder.id)}
+            className="px-1.5 py-0.5 rounded transition-colors hover:bg-white/5"
+            style={{
+              color: index === path.length - 1 ? "#d4a843" : "#6b6870",
+              fontFamily: "JetBrains Mono, monospace",
+              fontWeight: index === path.length - 1 ? 600 : 400,
+            }}
+          >{folder.name}</button>
+        </span>
+      ))}
+
+      {/* Current folder (only when it's not already the last segment in path) */}
+      {currentFolder && (() => {
+        const lastItemInPath = path[path.length - 1];
+        return !lastItemInPath || lastItemInPath.id !== currentFolder.id;
+      })() && (
+        <>
+          <span className="text-[10px] mx-0.5" style={{ color: "#2a2830" }}>›</span>
+          <button
+            onClick={() => onSelect(currentFolder.id)}
+            className="px-1.5 py-0.5 rounded transition-colors hover:bg-white/5"
+            style={{ color: "#e8e6e1", fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}
+          >{currentFolder.name}</button>
+        </>
+      )}
+    </nav>
+  );
+}
+
 // ─── media card ─────────────────────────────────────────────────────────────
 
 function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => void; onDelete: () => void }) {
@@ -883,7 +970,11 @@ function MediaCard({ item, onEdit, onDelete }: { item: MediaItem; onEdit: () => 
       </div>
       <div className="px-2 pt-2 flex flex-col gap-1 items-center text-center">
         <h3 className="font-medium leading-tight text-sm" style={{ color: "#e8e6e1", fontFamily: "DM Serif Display, serif" }}>{item.title}</h3>
-        {item.year && <p className="text-xs" style={{ color: "#6b6870" }}>{item.year}</p>}
+        {item.year && (
+          <p className="text-xs" style={{ color: "#6b6870" }}>
+            {item.month ? new Date(2000, item.month - 1).toLocaleString("en", { month: "short" }) : ""}{item.month && item.year ? " " : ""}{item.year}
+          </p>
+        )}
         {item.notes && <p className="text-xs leading-relaxed line-clamp-2" style={{ color: "#a8a5a0" }}>{item.notes}</p>}
       </div>
       <div className="flex justify-center px-2 py-2 mt-auto">
@@ -1295,6 +1386,7 @@ export default function App() {
     setItems((prev) => [{
       id: uid(), folderId: selectedFolderId, title: data.title, status: data.status,
       rating: data.rating ? parseInt(data.rating) : null, year: parseInt(data.year),
+      month: data.month ? parseInt(data.month) : null,
       genre: data.genre, cover: data.cover, notes: data.notes,
       addedAt: new Date().toISOString().slice(0, 10),
     }, ...prev]);
@@ -1306,6 +1398,7 @@ export default function App() {
     setItems((prev) => prev.map((i) => i.id !== editingItem.id ? i : {
       ...i, title: data.title, status: data.status,
       rating: data.rating ? parseInt(data.rating) : null, year: parseInt(data.year),
+      month: data.month ? parseInt(data.month) : null,
       genre: data.genre, cover: data.cover, notes: data.notes,
       folderId: data.folderId || i.folderId,
     }));
@@ -1401,6 +1494,7 @@ export default function App() {
           Status: STATUS_LABELS[item.status],
           Rating: item.rating ?? "",
           Year: item.year,
+          Month: item.month ? new Date(2000, item.month - 1).toLocaleString("en", { month: "short" }) : "",
           Genre: item.genre,
           Notes: item.notes,
           "Added At": item.addedAt,
@@ -1411,7 +1505,7 @@ export default function App() {
       const worksheet = XLSX.utils.json_to_sheet(rows);
       worksheet["!cols"] = [
         { wch: 14 }, { wch: 24 }, { wch: 30 }, { wch: 10 }, { wch: 8 },
-        { wch: 8 }, { wch: 16 }, { wch: 40 }, { wch: 12 }, { wch: 40 },
+        { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 40 }, { wch: 12 }, { wch: 40 },
       ];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Collection");
@@ -1422,7 +1516,7 @@ export default function App() {
   };
 
   const editForm: ItemFormData = editingItem
-    ? { title: editingItem.title, status: editingItem.status, rating: editingItem.rating?.toString() ?? "", year: editingItem.year.toString(), genre: editingItem.genre, cover: editingItem.cover, notes: editingItem.notes, folderId: editingItem.folderId }
+    ? { title: editingItem.title, status: editingItem.status, rating: editingItem.rating?.toString() ?? "", year: editingItem.year.toString(), month: editingItem.month?.toString() ?? "", genre: editingItem.genre, cover: editingItem.cover, notes: editingItem.notes, folderId: editingItem.folderId }
     : BLANK_ITEM;
 
   const currentType = selectedTypeId ? typeMap[selectedTypeId] : null;
@@ -1582,6 +1676,26 @@ export default function App() {
                   {currentFolder.name}
                 </h2>
               )}
+
+              {/* Breadcrumb */}
+              {(selectedTypeId || selectedFolderId) && (
+                <Breadcrumb
+                  path={breadcrumb}
+                  currentFolder={currentFolder}
+                  typeLabel={currentType ? `${currentType.icon} ${currentType.label}` : ""}
+                  onSelect={(id) => {
+                    if (id === "__type__") {
+                      setSelectedFolderId(null);
+                    } else if (id === "") {
+                      setSelectedTypeId(null);
+                      setSelectedFolderId(null);
+                    } else {
+                      selectFolder(id);
+                    }
+                  }}
+                />
+              )}
+
               {/* Subfolders */}
               {visibleSubfolders.length > 0 && (
                 <div>
